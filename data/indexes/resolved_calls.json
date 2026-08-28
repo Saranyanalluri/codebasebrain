@@ -1,0 +1,734 @@
+[
+  {
+    "source": "Flask.__init__",
+    "target": "App.add_url_rule",
+    "type": "CALLS",
+    "line": 359
+  },
+  {
+    "source": "Flask.send_static_file",
+    "target": "Flask.get_send_file_max_age",
+    "type": "CALLS",
+    "line": 410
+  },
+  {
+    "source": "Flask.update_template_context",
+    "target": "Flask.ensure_sync",
+    "type": "CALLS",
+    "line": 617
+  },
+  {
+    "source": "Flask.handle_http_exception",
+    "target": "App._find_error_handler",
+    "type": "CALLS",
+    "line": 863
+  },
+  {
+    "source": "Flask.handle_http_exception",
+    "target": "Flask.ensure_sync",
+    "type": "CALLS",
+    "line": 866
+  },
+  {
+    "source": "Flask.handle_user_exception",
+    "target": "App.trap_http_exception",
+    "type": "CALLS",
+    "line": 890
+  },
+  {
+    "source": "Flask.handle_user_exception",
+    "target": "Flask.handle_http_exception",
+    "type": "CALLS",
+    "line": 891
+  },
+  {
+    "source": "Flask.handle_user_exception",
+    "target": "App._find_error_handler",
+    "type": "CALLS",
+    "line": 893
+  },
+  {
+    "source": "Flask.handle_user_exception",
+    "target": "Flask.ensure_sync",
+    "type": "CALLS",
+    "line": 898
+  },
+  {
+    "source": "Flask.handle_exception",
+    "target": "Flask.log_exception",
+    "type": "CALLS",
+    "line": 943
+  },
+  {
+    "source": "Flask.handle_exception",
+    "target": "App._find_error_handler",
+    "type": "CALLS",
+    "line": 946
+  },
+  {
+    "source": "Flask.handle_exception",
+    "target": "Flask.ensure_sync",
+    "type": "CALLS",
+    "line": 949
+  },
+  {
+    "source": "Flask.handle_exception",
+    "target": "Flask.finalize_request",
+    "type": "CALLS",
+    "line": 951
+  },
+  {
+    "source": "Flask.dispatch_request",
+    "target": "Flask.raise_routing_exception",
+    "type": "CALLS",
+    "line": 982
+  },
+  {
+    "source": "Flask.dispatch_request",
+    "target": "Flask.make_default_options_response",
+    "type": "CALLS",
+    "line": 990
+  },
+  {
+    "source": "Flask.dispatch_request",
+    "target": "Flask.ensure_sync",
+    "type": "CALLS",
+    "line": 993
+  },
+  {
+    "source": "Flask.full_dispatch_request",
+    "target": "Flask.preprocess_request",
+    "type": "CALLS",
+    "line": 1017
+  },
+  {
+    "source": "Flask.full_dispatch_request",
+    "target": "Flask.dispatch_request",
+    "type": "CALLS",
+    "line": 1019
+  },
+  {
+    "source": "Flask.full_dispatch_request",
+    "target": "Flask.handle_user_exception",
+    "type": "CALLS",
+    "line": 1021
+  },
+  {
+    "source": "Flask.full_dispatch_request",
+    "target": "Flask.finalize_request",
+    "type": "CALLS",
+    "line": 1022
+  },
+  {
+    "source": "Flask.finalize_request",
+    "target": "Flask.make_response",
+    "type": "CALLS",
+    "line": 1042
+  },
+  {
+    "source": "Flask.finalize_request",
+    "target": "Flask.process_response",
+    "type": "CALLS",
+    "line": 1044
+  },
+  {
+    "source": "Flask.ensure_sync",
+    "target": "Flask.async_to_sync",
+    "type": "CALLS",
+    "line": 1078
+  },
+  {
+    "source": "Flask.url_for",
+    "target": "Flask.create_url_adapter",
+    "type": "CALLS",
+    "line": 1185
+  },
+  {
+    "source": "Flask.url_for",
+    "target": "App.inject_url_defaults",
+    "type": "CALLS",
+    "line": 1205
+  },
+  {
+    "source": "Flask.url_for",
+    "target": "App.handle_url_build_error",
+    "type": "CALLS",
+    "line": 1219
+  },
+  {
+    "source": "Flask.preprocess_request",
+    "target": "Flask.ensure_sync",
+    "type": "CALLS",
+    "line": 1390
+  },
+  {
+    "source": "Flask.process_response",
+    "target": "Flask.ensure_sync",
+    "type": "CALLS",
+    "line": 1411
+  },
+  {
+    "source": "Flask.process_response",
+    "target": "Flask.ensure_sync",
+    "type": "CALLS",
+    "line": 1416
+  },
+  {
+    "source": "Flask.do_teardown_request",
+    "target": "Flask.ensure_sync",
+    "type": "CALLS",
+    "line": 1449
+  },
+  {
+    "source": "Flask.do_teardown_appcontext",
+    "target": "Flask.ensure_sync",
+    "type": "CALLS",
+    "line": 1477
+  },
+  {
+    "source": "Flask.test_request_context",
+    "target": "Flask.request_context",
+    "type": "CALLS",
+    "line": 1567
+  },
+  {
+    "source": "Flask.wsgi_app",
+    "target": "Flask.request_context",
+    "type": "CALLS",
+    "line": 1595
+  },
+  {
+    "source": "Flask.wsgi_app",
+    "target": "Flask.full_dispatch_request",
+    "type": "CALLS",
+    "line": 1600
+  },
+  {
+    "source": "Flask.wsgi_app",
+    "target": "Flask.handle_exception",
+    "type": "CALLS",
+    "line": 1603
+  },
+  {
+    "source": "Flask.__call__",
+    "target": "Flask.wsgi_app",
+    "type": "CALLS",
+    "line": 1628
+  },
+  {
+    "source": "Blueprint.send_static_file",
+    "target": "Blueprint.get_send_file_max_age",
+    "type": "CALLS",
+    "line": 99
+  },
+  {
+    "source": "FlaskGroup.get_command",
+    "target": "FlaskGroup._load_plugin_commands",
+    "type": "CALLS",
+    "line": 610
+  },
+  {
+    "source": "FlaskGroup.list_commands",
+    "target": "FlaskGroup._load_plugin_commands",
+    "type": "CALLS",
+    "line": 637
+  },
+  {
+    "source": "Config.from_envvar",
+    "target": "Config.from_pyfile",
+    "type": "CALLS",
+    "line": 124
+  },
+  {
+    "source": "Config.from_pyfile",
+    "target": "Config.from_object",
+    "type": "CALLS",
+    "line": 215
+  },
+  {
+    "source": "Config.from_file",
+    "target": "Config.from_mapping",
+    "type": "CALLS",
+    "line": 302
+  },
+  {
+    "source": "AppContext.session",
+    "target": "AppContext._get_session",
+    "type": "CALLS",
+    "line": 401
+  },
+  {
+    "source": "AppContext.push",
+    "target": "AppContext._get_session",
+    "type": "CALLS",
+    "line": 439
+  },
+  {
+    "source": "AppContext.push",
+    "target": "AppContext.match_request",
+    "type": "CALLS",
+    "line": 444
+  },
+  {
+    "source": "AppContext.__enter__",
+    "target": "AppContext.push",
+    "type": "CALLS",
+    "line": 507
+  },
+  {
+    "source": "AppContext.__exit__",
+    "target": "AppContext.pop",
+    "type": "CALLS",
+    "line": 516
+  },
+  {
+    "source": "SecureCookieSessionInterface.open_session",
+    "target": "SecureCookieSessionInterface.get_signing_serializer",
+    "type": "CALLS",
+    "line": 324
+  },
+  {
+    "source": "SecureCookieSessionInterface.open_session",
+    "target": "SessionInterface.get_cookie_name",
+    "type": "CALLS",
+    "line": 327
+  },
+  {
+    "source": "SecureCookieSessionInterface.save_session",
+    "target": "SessionInterface.get_cookie_name",
+    "type": "CALLS",
+    "line": 340
+  },
+  {
+    "source": "SecureCookieSessionInterface.save_session",
+    "target": "SessionInterface.get_cookie_domain",
+    "type": "CALLS",
+    "line": 341
+  },
+  {
+    "source": "SecureCookieSessionInterface.save_session",
+    "target": "SessionInterface.get_cookie_path",
+    "type": "CALLS",
+    "line": 342
+  },
+  {
+    "source": "SecureCookieSessionInterface.save_session",
+    "target": "SessionInterface.get_cookie_secure",
+    "type": "CALLS",
+    "line": 343
+  },
+  {
+    "source": "SecureCookieSessionInterface.save_session",
+    "target": "SessionInterface.get_cookie_partitioned",
+    "type": "CALLS",
+    "line": 344
+  },
+  {
+    "source": "SecureCookieSessionInterface.save_session",
+    "target": "SessionInterface.get_cookie_samesite",
+    "type": "CALLS",
+    "line": 345
+  },
+  {
+    "source": "SecureCookieSessionInterface.save_session",
+    "target": "SessionInterface.get_cookie_httponly",
+    "type": "CALLS",
+    "line": 346
+  },
+  {
+    "source": "SecureCookieSessionInterface.save_session",
+    "target": "SessionInterface.should_set_cookie",
+    "type": "CALLS",
+    "line": 369
+  },
+  {
+    "source": "SecureCookieSessionInterface.save_session",
+    "target": "SessionInterface.get_expiration_time",
+    "type": "CALLS",
+    "line": 372
+  },
+  {
+    "source": "SecureCookieSessionInterface.save_session",
+    "target": "SecureCookieSessionInterface.get_signing_serializer",
+    "type": "CALLS",
+    "line": 373
+  },
+  {
+    "source": "DispatchingJinjaLoader.get_source",
+    "target": "DispatchingJinjaLoader._get_source_explained",
+    "type": "CALLS",
+    "line": 61
+  },
+  {
+    "source": "DispatchingJinjaLoader.get_source",
+    "target": "DispatchingJinjaLoader._get_source_fast",
+    "type": "CALLS",
+    "line": 62
+  },
+  {
+    "source": "DispatchingJinjaLoader._get_source_explained",
+    "target": "DispatchingJinjaLoader._iter_loaders",
+    "type": "CALLS",
+    "line": 71
+  },
+  {
+    "source": "DispatchingJinjaLoader._get_source_fast",
+    "target": "DispatchingJinjaLoader._iter_loaders",
+    "type": "CALLS",
+    "line": 91
+  },
+  {
+    "source": "FlaskClient._request_from_builder_args",
+    "target": "FlaskClient._copy_environ",
+    "type": "CALLS",
+    "line": 196
+  },
+  {
+    "source": "FlaskClient.open",
+    "target": "FlaskClient._copy_environ",
+    "type": "CALLS",
+    "line": 216
+  },
+  {
+    "source": "FlaskClient.open",
+    "target": "FlaskClient._copy_environ",
+    "type": "CALLS",
+    "line": 220
+  },
+  {
+    "source": "FlaskClient.open",
+    "target": "FlaskClient._copy_environ",
+    "type": "CALLS",
+    "line": 225
+  },
+  {
+    "source": "FlaskClient.open",
+    "target": "FlaskClient._request_from_builder_args",
+    "type": "CALLS",
+    "line": 228
+  },
+  {
+    "source": "JSONProvider.dump",
+    "target": "JSONProvider.dumps",
+    "type": "CALLS",
+    "line": 57
+  },
+  {
+    "source": "JSONProvider.load",
+    "target": "JSONProvider.loads",
+    "type": "CALLS",
+    "line": 73
+  },
+  {
+    "source": "JSONProvider.response",
+    "target": "JSONProvider._prepare_response_obj",
+    "type": "CALLS",
+    "line": 104
+  },
+  {
+    "source": "JSONProvider.response",
+    "target": "JSONProvider.dumps",
+    "type": "CALLS",
+    "line": 105
+  },
+  {
+    "source": "DefaultJSONProvider.response",
+    "target": "JSONProvider._prepare_response_obj",
+    "type": "CALLS",
+    "line": 205
+  },
+  {
+    "source": "DefaultJSONProvider.response",
+    "target": "DefaultJSONProvider.dumps",
+    "type": "CALLS",
+    "line": 214
+  },
+  {
+    "source": "JSONTag.tag",
+    "target": "JSONTag.to_json",
+    "type": "CALLS",
+    "line": 90
+  },
+  {
+    "source": "TaggedJSONSerializer.__init__",
+    "target": "TaggedJSONSerializer.register",
+    "type": "CALLS",
+    "line": 254
+  },
+  {
+    "source": "TaggedJSONSerializer._untag_scan",
+    "target": "TaggedJSONSerializer._untag_scan",
+    "type": "CALLS",
+    "line": 312
+  },
+  {
+    "source": "TaggedJSONSerializer._untag_scan",
+    "target": "TaggedJSONSerializer.untag",
+    "type": "CALLS",
+    "line": 314
+  },
+  {
+    "source": "TaggedJSONSerializer._untag_scan",
+    "target": "TaggedJSONSerializer._untag_scan",
+    "type": "CALLS",
+    "line": 317
+  },
+  {
+    "source": "TaggedJSONSerializer.dumps",
+    "target": "TaggedJSONSerializer.tag",
+    "type": "CALLS",
+    "line": 323
+  },
+  {
+    "source": "TaggedJSONSerializer.loads",
+    "target": "TaggedJSONSerializer._untag_scan",
+    "type": "CALLS",
+    "line": 327
+  },
+  {
+    "source": "App.__init__",
+    "target": "App.auto_find_instance_path",
+    "type": "CALLS",
+    "line": 301
+  },
+  {
+    "source": "App.__init__",
+    "target": "App.make_config",
+    "type": "CALLS",
+    "line": 316
+  },
+  {
+    "source": "App.__init__",
+    "target": "App.make_aborter",
+    "type": "CALLS",
+    "line": 324
+  },
+  {
+    "source": "App.jinja_env",
+    "target": "App.create_jinja_environment",
+    "type": "CALLS",
+    "line": 474
+  },
+  {
+    "source": "App.template_filter",
+    "target": "App.add_template_filter",
+    "type": "CALLS",
+    "line": 689
+  },
+  {
+    "source": "App.decorator",
+    "target": "App.add_template_filter",
+    "type": "CALLS",
+    "line": 693
+  },
+  {
+    "source": "App.template_test",
+    "target": "App.add_template_test",
+    "type": "CALLS",
+    "line": 746
+  },
+  {
+    "source": "App.decorator",
+    "target": "App.add_template_test",
+    "type": "CALLS",
+    "line": 750
+  },
+  {
+    "source": "App.template_global",
+    "target": "App.add_template_global",
+    "type": "CALLS",
+    "line": 800
+  },
+  {
+    "source": "App.decorator",
+    "target": "App.add_template_global",
+    "type": "CALLS",
+    "line": 804
+  },
+  {
+    "source": "App._find_error_handler",
+    "target": "Scaffold._get_exc_class_and_code",
+    "type": "CALLS",
+    "line": 876
+  },
+  {
+    "source": "Blueprint.record_once",
+    "target": "Blueprint.record",
+    "type": "CALLS",
+    "line": 244
+  },
+  {
+    "source": "Blueprint.register",
+    "target": "Blueprint.make_setup_state",
+    "type": "CALLS",
+    "line": 321
+  },
+  {
+    "source": "Blueprint.register",
+    "target": "Blueprint._merge_blueprint_funcs",
+    "type": "CALLS",
+    "line": 332
+  },
+  {
+    "source": "Blueprint.add_url_rule",
+    "target": "Blueprint.record",
+    "type": "CALLS",
+    "line": 433
+  },
+  {
+    "source": "Blueprint.app_template_filter",
+    "target": "Blueprint.add_app_template_filter",
+    "type": "CALLS",
+    "line": 466
+  },
+  {
+    "source": "Blueprint.decorator",
+    "target": "Blueprint.add_app_template_filter",
+    "type": "CALLS",
+    "line": 470
+  },
+  {
+    "source": "Blueprint.add_app_template_filter",
+    "target": "Blueprint.record_once",
+    "type": "CALLS",
+    "line": 495
+  },
+  {
+    "source": "Blueprint.app_template_test",
+    "target": "Blueprint.add_app_template_test",
+    "type": "CALLS",
+    "line": 522
+  },
+  {
+    "source": "Blueprint.decorator",
+    "target": "Blueprint.add_app_template_test",
+    "type": "CALLS",
+    "line": 526
+  },
+  {
+    "source": "Blueprint.add_app_template_test",
+    "target": "Blueprint.record_once",
+    "type": "CALLS",
+    "line": 553
+  },
+  {
+    "source": "Blueprint.app_template_global",
+    "target": "Blueprint.add_app_template_global",
+    "type": "CALLS",
+    "line": 580
+  },
+  {
+    "source": "Blueprint.decorator",
+    "target": "Blueprint.add_app_template_global",
+    "type": "CALLS",
+    "line": 584
+  },
+  {
+    "source": "Blueprint.add_app_template_global",
+    "target": "Blueprint.record_once",
+    "type": "CALLS",
+    "line": 611
+  },
+  {
+    "source": "Blueprint.before_app_request",
+    "target": "Blueprint.record_once",
+    "type": "CALLS",
+    "line": 618
+  },
+  {
+    "source": "Blueprint.after_app_request",
+    "target": "Blueprint.record_once",
+    "type": "CALLS",
+    "line": 628
+  },
+  {
+    "source": "Blueprint.teardown_app_request",
+    "target": "Blueprint.record_once",
+    "type": "CALLS",
+    "line": 638
+  },
+  {
+    "source": "Blueprint.app_context_processor",
+    "target": "Blueprint.record_once",
+    "type": "CALLS",
+    "line": 650
+  },
+  {
+    "source": "Blueprint.decorator",
+    "target": "Blueprint.record_once",
+    "type": "CALLS",
+    "line": 667
+  },
+  {
+    "source": "Blueprint.app_url_value_preprocessor",
+    "target": "Blueprint.record_once",
+    "type": "CALLS",
+    "line": 679
+  },
+  {
+    "source": "Blueprint.app_url_defaults",
+    "target": "Blueprint.record_once",
+    "type": "CALLS",
+    "line": 689
+  },
+  {
+    "source": "Scaffold._method_route",
+    "target": "Scaffold.route",
+    "type": "CALLS",
+    "line": 293
+  },
+  {
+    "source": "Scaffold.get",
+    "target": "Scaffold._method_route",
+    "type": "CALLS",
+    "line": 301
+  },
+  {
+    "source": "Scaffold.query",
+    "target": "Scaffold._method_route",
+    "type": "CALLS",
+    "line": 309
+  },
+  {
+    "source": "Scaffold.post",
+    "target": "Scaffold._method_route",
+    "type": "CALLS",
+    "line": 317
+  },
+  {
+    "source": "Scaffold.put",
+    "target": "Scaffold._method_route",
+    "type": "CALLS",
+    "line": 325
+  },
+  {
+    "source": "Scaffold.delete",
+    "target": "Scaffold._method_route",
+    "type": "CALLS",
+    "line": 333
+  },
+  {
+    "source": "Scaffold.patch",
+    "target": "Scaffold._method_route",
+    "type": "CALLS",
+    "line": 341
+  },
+  {
+    "source": "Scaffold.decorator",
+    "target": "Scaffold.add_url_rule",
+    "type": "CALLS",
+    "line": 370
+  },
+  {
+    "source": "Scaffold.decorator",
+    "target": "Scaffold.register_error_handler",
+    "type": "CALLS",
+    "line": 644
+  },
+  {
+    "source": "Scaffold.register_error_handler",
+    "target": "Scaffold._get_exc_class_and_code",
+    "type": "CALLS",
+    "line": 661
+  }
+]
