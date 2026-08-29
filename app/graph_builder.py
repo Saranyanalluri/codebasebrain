@@ -2,6 +2,17 @@ import ast
 import json
 from pathlib import Path
 
+RESOLVED_IMPORTS_PATH = Path(
+    "data/indexes/resolved_imports.json"
+)
+def load_resolved_imports():
+
+    with RESOLVED_IMPORTS_PATH.open(
+        "r",
+        encoding="utf-8"
+    ) as file:
+        return json.load(file)
+    
 RESOLVED_CALLS_PATH = Path(
     "data/indexes/resolved_calls.json"
 )
@@ -164,6 +175,11 @@ def main():
         resolved_calls
     )
 
+    resolved_imports = load_resolved_imports()
+
+    graph["edges"].extend(
+        resolved_imports
+    )   
     print(
         f"Nodes: {len(graph['nodes'])}"
     )
