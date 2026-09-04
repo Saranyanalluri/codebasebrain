@@ -1,7 +1,7 @@
 import json
 import re
 from pathlib import Path
-from retrieval import RetrievalResult
+from app.retrieval import RetrievalResult
 
 from rank_bm25 import BM25Okapi
 
@@ -89,7 +89,7 @@ class BM25Retriever:
                 )
             )
 
-            return results
+        return results
 
 
 def main():
