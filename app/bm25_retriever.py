@@ -23,13 +23,28 @@ def load_documents():
 
 def tokenize(text):
 
-    # Keep identifiers useful for code search.
-    text = text.replace("_", " ")
+    text = text.lower()
 
-    return re.findall(
-        r"[A-Za-z0-9]+",
-        text.lower()
+    # Keep the original identifier.
+    tokens = re.findall(
+        r"[a-zA-Z_][a-zA-Z0-9_]*",
+        text
     )
+
+    # Also add identifier components.
+    expanded_tokens = []
+
+    for token in tokens:
+        expanded_tokens.append(token)
+
+        if "_" in token:
+            expanded_tokens.extend(
+                part
+                for part in token.split("_")
+                if part
+            )
+
+    return expanded_tokens
 
 
 class BM25Retriever:

@@ -1,0 +1,22 @@
+[
+    {
+        "query": "How does Flask dispatch an incoming HTTP request?",
+        "expected": "Flask.full_dispatch_request"
+    },
+    {
+        "query": "How does Flask handle exceptions?",
+        "expected": "Flask.handle_exception"
+    },
+    {
+        "query": "How does Flask send a static file?",
+        "expected": "Flask.send_static_file"
+    },
+    {
+        "query": "How are user sessions saved in Flask?",
+        "expected": "SecureCookieSessionInterface.save_session"
+    },
+    {
+        "query": "How does Flask register URL rules?",
+        "expected": "App.add_url_rule"
+    }
+]

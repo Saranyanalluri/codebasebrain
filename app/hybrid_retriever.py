@@ -1,8 +1,6 @@
 import json
 from pathlib import Path
 
-from sentence_transformers import CrossEncoder
-
 from app.bm25_retriever import BM25Retriever
 from app.semantic_retriever import SemanticRetriever
 from app.graph_retriever import GraphRetriever
@@ -37,11 +35,6 @@ class HybridRetriever:
 
         # Initialize graph retriever
         self.graph = GraphRetriever()
-
-        # Initialize Cross-Encoder reranker
-        self.reranker = CrossEncoder(
-            "cross-encoder/ms-marco-MiniLM-L-6-v2"
-        )
 
     def search(
         self,
@@ -182,7 +175,7 @@ class HybridRetriever:
             )
 
         # --------------------------------------------------
-        # 7. First-stage ranking using RRF
+        # 7. Final ranking using RRF
         # --------------------------------------------------
 
         ranked = sorted(
@@ -191,56 +184,8 @@ class HybridRetriever:
             reverse=True
         )
 
-        # Keep the best candidates for reranking
-        candidates = ranked[:candidate_k]
-
         # --------------------------------------------------
-        # 8. Build query-document pairs
-        # --------------------------------------------------
-
-        pairs = []
-
-        for item in candidates:
-
-            document = self.documents[
-                item["result"].document_id
-            ]
-
-            pairs.append(
-                (
-                    query,
-                    document["text"]
-                )
-            )
-
-        # --------------------------------------------------
-        # 9. Cross-Encoder reranking
-        # --------------------------------------------------
-
-        rerank_scores = self.reranker.predict(
-            pairs
-        )
-
-        # Attach reranking scores
-        for item, score in zip(
-            candidates,
-            rerank_scores
-        ):
-
-            item["rerank_score"] = float(score)
-
-        # --------------------------------------------------
-        # 10. Final ranking
-        # --------------------------------------------------
-
-        reranked = sorted(
-            candidates,
-            key=lambda item: item["rerank_score"],
-            reverse=True
-        )
-
-        # --------------------------------------------------
-        # 11. Return final results
+        # 8. Return results
         # --------------------------------------------------
 
         return [
@@ -250,10 +195,10 @@ class HybridRetriever:
                 "file": item["result"].file,
                 "line": item["result"].line,
                 "rrf_score": item["rrf_score"],
-                "rerank_score": item["rerank_score"],
+                "rerank_score": None,
                 "source": item["result"].source,
             }
-            for item in reranked[:top_k]
+            for item in ranked[:top_k]
         ]
 
 
@@ -275,7 +220,7 @@ if __name__ == "__main__":
         top_k=10
     )
 
-    print("\nHybrid Results:\n")
+    print("\nHybrid Results (RRF only):\n")
 
     for rank, result in enumerate(
         results,
@@ -286,6 +231,5 @@ if __name__ == "__main__":
             f"{rank}. "
             f"{result['qualified_name']} "
             f"| RRF={result['rrf_score']:.6f} "
-            f"| Rerank={result['rerank_score']:.4f} "
             f"| {result['file']}:{result['line']}"
         )
