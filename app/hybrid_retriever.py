@@ -3,6 +3,7 @@ from pathlib import Path
 
 from app.bm25_retriever import BM25Retriever
 from app.semantic_retriever import SemanticRetriever
+from app.graph_retriever import GraphRetriever
 
 
 DOCUMENTS_PATH = Path(
@@ -29,6 +30,8 @@ class HybridRetriever:
             DOCUMENTS_PATH
         )
 
+        self.graph = GraphRetriever()
+
     def search(
         self,
         query,
@@ -44,6 +47,19 @@ class HybridRetriever:
 
         semantic_results = self.semantic.search(
             query,
+            top_k=candidate_k
+        )
+        graph_seed_names = list(
+            {
+                result.qualified_name
+                for result in (
+                    bm25_results + semantic_results
+                )
+            }
+        )
+
+        graph_results = self.graph.search(
+            graph_seed_names,
             top_k=candidate_k
         )
 
@@ -83,6 +99,44 @@ class HybridRetriever:
                 1.0 / (rrf_k + rank)
             )
 
+            for rank, result in enumerate(
+                graph_results,
+                start=1
+            ):
+                document_id = next(
+                    (
+                    document["id"]
+                    for document in self.documents
+                    if document["qualified_name"]
+                    == result["qualified_name"]
+                    ),
+                    None
+                )
+
+                if document_id is None:
+                    continue
+
+                if document_id not in fused:
+                    fused[document_id] = {
+                        "result": type(
+                            "GraphResult",
+                        (),
+                        {
+                            "document_id": document_id,
+                            "qualified_name": result[
+                                "qualified_name"
+                            ],
+                            "file": result["file"],
+                            "line": result["line"],
+                            "source": "graph",
+                        }
+                    )(),
+                    "rrf_score": 0.0,
+                }
+
+            fused[document_id]["rrf_score"] += (
+                1.0 / (rrf_k + rank)
+            )
         ranked = sorted(
             fused.values(),
             key=lambda item: item["rrf_score"],
