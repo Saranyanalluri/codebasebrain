@@ -8,6 +8,9 @@ from app.retrieval import RetrievalResult
 
 
 DOCUMENTS_PATH = Path("data/indexes/code_documents.json")
+EMBEDDINGS_PATH = Path(
+    "data/indexes/semantic_embeddings.npy"
+)
 
 
 class SemanticRetriever:
@@ -24,12 +27,33 @@ class SemanticRetriever:
             self._build_search_text(document)
             for document in self.documents
         ]
+        
+        if EMBEDDINGS_PATH.exists():
 
-        self.embeddings = self.model.encode(
-            self.texts,
-            normalize_embeddings=True,
-            show_progress_bar=True,
-        )
+            self.embeddings = np.load(
+                EMBEDDINGS_PATH
+            )
+
+            print(
+                "Loaded cached semantic embeddings."
+            )
+
+        else:
+
+            self.embeddings = self.model.encode(
+                self.texts,
+                normalize_embeddings=True,
+                show_progress_bar=True,
+            )
+
+            np.save(
+                EMBEDDINGS_PATH,
+                self.embeddings
+            )
+
+            print(
+                "Saved semantic embeddings to cache."
+            )
 
     def _build_search_text(self, document):
         return (
