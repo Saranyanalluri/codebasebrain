@@ -1,3 +1,4 @@
+import ast
 import json
 from pathlib import Path
 
@@ -25,6 +26,32 @@ def load_symbols():
         return json.load(file)
 
 
+def get_ast_nodes(file_path):
+
+    source = file_path.read_text(
+        encoding="utf-8"
+    )
+
+    tree = ast.parse(source)
+
+    nodes = {}
+
+    for node in ast.walk(tree):
+
+        if isinstance(
+            node,
+            (
+                ast.FunctionDef,
+                ast.AsyncFunctionDef,
+                ast.ClassDef,
+            )
+        ):
+
+            nodes[node.lineno] = node
+
+    return source.splitlines(), nodes
+
+
 def read_symbol_source(symbol):
 
     file_path = (
@@ -32,18 +59,34 @@ def read_symbol_source(symbol):
         / symbol["file"]
     )
 
-    lines = file_path.read_text(
-        encoding="utf-8"
-    ).splitlines()
-
-    start = symbol["line"] - 1
-
-    # Initially take a reasonable
-    # context window.
-    end = min(
-        start + 80,
-        len(lines)
+    lines, nodes = get_ast_nodes(
+        file_path
     )
+
+    start_line = symbol["line"]
+
+    node = nodes.get(start_line)
+
+    if node is None:
+
+        # Fallback if the symbol cannot
+        # be matched to an AST node.
+        start = start_line - 1
+
+        end = min(
+            start + 80,
+            len(lines)
+        )
+
+        return "\n".join(
+            lines[start:end]
+        )
+
+    start = node.lineno - 1
+
+    # Python AST provides the exact
+    # ending line of the node.
+    end = node.end_lineno
 
     return "\n".join(
         lines[start:end]
@@ -56,7 +99,9 @@ def build_documents():
 
     documents = []
 
-    for index, symbol in enumerate(symbols):
+    for index, symbol in enumerate(
+        symbols
+    ):
 
         try:
 
@@ -93,10 +138,13 @@ def build_documents():
             "line":
                 symbol["line"],
 
-            "text": source,
+            "text":
+                source,
         }
 
-        documents.append(document)
+        documents.append(
+            document
+        )
 
     return documents
 
@@ -122,7 +170,9 @@ def save_documents(documents):
 
 def main():
 
-    print("Building code documents...")
+    print(
+        "Building code documents..."
+    )
 
     documents = build_documents()
 
@@ -131,21 +181,26 @@ def main():
         f"{len(documents)}"
     )
 
-    save_documents(documents)
+    save_documents(
+        documents
+    )
 
     print(
         f"Saved documents to: "
         f"{OUTPUT_PATH}"
     )
 
-    print("\nFirst document:\n")
+    print(
+        "\nFirst document:\n"
+    )
 
     if documents:
 
         document = documents[0]
 
         print(
-            f"ID: {document['id']}"
+            f"ID: "
+            f"{document['id']}"
         )
 
         print(
@@ -165,4 +220,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()

@@ -34,7 +34,7 @@ def main():
         ),
         (
             "How does Flask register URL rules?",
-            "Flask.add_url_rule",
+            "App.add_url_rule",
         ),
     ]
 

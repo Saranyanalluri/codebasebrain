@@ -4,6 +4,7 @@ from pathlib import Path
 from app.bm25_retriever import BM25Retriever
 from app.semantic_retriever import SemanticRetriever
 from app.graph_retriever import GraphRetriever
+from app.query_expander import expand_query
 
 
 DOCUMENTS_PATH = Path(
@@ -21,6 +22,7 @@ class HybridRetriever:
             "r",
             encoding="utf-8"
         ) as file:
+
             self.documents = json.load(file)
 
         # Initialize BM25 retriever
@@ -45,16 +47,26 @@ class HybridRetriever:
     ):
 
         # --------------------------------------------------
-        # 1. BM25 retrieval
+        # 1. Expand query for lexical retrieval
+        # --------------------------------------------------
+
+        expanded_query = expand_query(
+            query
+        )
+
+        # --------------------------------------------------
+        # 2. BM25 retrieval
         # --------------------------------------------------
 
         bm25_results = self.bm25.search(
-            query,
+            expanded_query,
             top_k=candidate_k
         )
 
         # --------------------------------------------------
-        # 2. Semantic retrieval
+        # 3. Semantic retrieval
+        #
+        # Semantic retrieval uses the original query.
         # --------------------------------------------------
 
         semantic_results = self.semantic.search(
@@ -63,7 +75,7 @@ class HybridRetriever:
         )
 
         # --------------------------------------------------
-        # 3. Select seeds for graph retrieval
+        # 4. Select seeds for graph retrieval
         # --------------------------------------------------
 
         graph_seed_names = list(
@@ -76,7 +88,7 @@ class HybridRetriever:
         )
 
         # --------------------------------------------------
-        # 4. Graph retrieval
+        # 5. Graph retrieval
         # --------------------------------------------------
 
         graph_results = self.graph.search(
@@ -85,7 +97,7 @@ class HybridRetriever:
         )
 
         # --------------------------------------------------
-        # 5. Map qualified names to document IDs
+        # 6. Map qualified names to document IDs
         # --------------------------------------------------
 
         document_id_by_name = {
@@ -94,12 +106,15 @@ class HybridRetriever:
         }
 
         # --------------------------------------------------
-        # 6. Reciprocal Rank Fusion
+        # 7. Reciprocal Rank Fusion
         # --------------------------------------------------
 
         fused = {}
 
+        # --------------------------------------------------
         # BM25 contribution
+        # --------------------------------------------------
+
         for rank, result in enumerate(
             bm25_results,
             start=1
@@ -119,7 +134,10 @@ class HybridRetriever:
                 1.0 / (rrf_k + rank)
             )
 
+        # --------------------------------------------------
         # Semantic contribution
+        # --------------------------------------------------
+
         for rank, result in enumerate(
             semantic_results,
             start=1
@@ -138,7 +156,10 @@ class HybridRetriever:
                 1.0 / (rrf_k + rank)
             )
 
+        # --------------------------------------------------
         # Graph contribution
+        # --------------------------------------------------
+
         for rank, result in enumerate(
             graph_results,
             start=1
@@ -175,7 +196,7 @@ class HybridRetriever:
             )
 
         # --------------------------------------------------
-        # 7. Final ranking using RRF
+        # 8. Final ranking using RRF
         # --------------------------------------------------
 
         ranked = sorted(
@@ -185,7 +206,7 @@ class HybridRetriever:
         )
 
         # --------------------------------------------------
-        # 8. Return results
+        # 9. Return results
         # --------------------------------------------------
 
         return [
@@ -220,7 +241,10 @@ if __name__ == "__main__":
         top_k=10
     )
 
-    print("\nHybrid Results (RRF only):\n")
+    print(
+        "\nHybrid Results "
+        "(RRF + Query Expansion):\n"
+    )
 
     for rank, result in enumerate(
         results,
