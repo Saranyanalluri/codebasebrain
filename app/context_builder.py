@@ -6,23 +6,34 @@ DOCUMENTS_PATH = Path(
     "data/indexes/code_documents.json"
 )
 
+GRAPH_PATH = Path(
+    "data/indexes/code_graph.json"
+)
+
 
 class ContextBuilder:
     """
-    Builds structured context from retrieval results.
-
-    The context is intended to be consumed later by
-    an answer-generation model.
+    Builds structured, graph-aware context from
+    retrieval results.
     """
 
     def __init__(
         self,
-        documents_path=DOCUMENTS_PATH
+        documents_path=DOCUMENTS_PATH,
+        graph_path=GRAPH_PATH
     ):
 
         self.documents_path = Path(
             documents_path
         )
+
+        self.graph_path = Path(
+            graph_path
+        )
+
+        # --------------------------------------------------
+        # Load code documents
+        # --------------------------------------------------
 
         with open(
             self.documents_path,
@@ -32,11 +43,130 @@ class ContextBuilder:
 
             self.documents = json.load(file)
 
-        # Fast document lookup
         self.documents_by_id = {
             document["id"]: document
             for document in self.documents
         }
+
+        # --------------------------------------------------
+        # Load code graph
+        # --------------------------------------------------
+
+        with open(
+            self.graph_path,
+            "r",
+            encoding="utf-8"
+        ) as file:
+
+            self.graph = json.load(file)
+
+        self.nodes = self.graph.get(
+            "nodes",
+            []
+        )
+
+        self.edges = self.graph.get(
+            "edges",
+            []
+        )
+
+        # --------------------------------------------------
+        # Build relationship lookup
+        # --------------------------------------------------
+
+        self.relationships = {}
+
+        for edge in self.edges:
+
+            source = edge.get(
+                "source"
+            )
+
+            target = edge.get(
+                "target"
+            )
+
+            edge_type = edge.get(
+                "type"
+            )
+
+            if not source or not target:
+                continue
+
+            # Outgoing relationship
+            self.relationships.setdefault(
+                source,
+                []
+            ).append({
+                "direction": "outgoing",
+                "type": edge_type,
+                "target": target
+            })
+
+            # Incoming relationship
+            self.relationships.setdefault(
+                target,
+                []
+            ).append({
+                "direction": "incoming",
+                "type": edge_type,
+                "source": source
+            })
+
+    # ======================================================
+    # Graph helpers
+    # ======================================================
+
+    def get_relationships(
+        self,
+        qualified_name
+    ):
+        """
+        Return graph relationships connected
+        to a symbol.
+        """
+
+        return self.relationships.get(
+            qualified_name,
+            []
+        )
+
+    def _format_relationship(
+        self,
+        relationship
+    ):
+
+        direction = relationship.get(
+            "direction"
+        )
+
+        edge_type = relationship.get(
+            "type"
+        )
+
+        if direction == "outgoing":
+
+            target = relationship.get(
+                "target"
+            )
+
+            return (
+                f"{edge_type}: "
+                f"{target}"
+            )
+
+        source = relationship.get(
+            "source"
+        )
+
+        return (
+            f"{edge_type}: "
+            f"{source}"
+        )
+
+    # ======================================================
+    # Build structured context
+    # ======================================================
 
     def build(
         self,
@@ -44,21 +174,6 @@ class ContextBuilder:
         results,
         max_results=5
     ):
-        """
-        Build a structured context object.
-
-        Parameters
-        ----------
-        query:
-            Original user query.
-
-        results:
-            Results returned by HybridRetriever.
-
-        max_results:
-            Maximum number of retrieved results
-            to include in the context.
-        """
 
         context_results = []
 
@@ -75,12 +190,20 @@ class ContextBuilder:
             if document is None:
                 continue
 
+            qualified_name = result.get(
+                "qualified_name"
+            )
+
+            graph_relationships = (
+                self.get_relationships(
+                    qualified_name
+                )
+            )
+
             context_results.append({
 
                 "qualified_name":
-                    result.get(
-                        "qualified_name"
-                    ),
+                    qualified_name,
 
                 "file":
                     result.get(
@@ -119,7 +242,10 @@ class ContextBuilder:
                 "final_score":
                     result.get(
                         "final_score"
-                    )
+                    ),
+
+                "graph_relationships":
+                    graph_relationships
             })
 
         return {
@@ -127,17 +253,14 @@ class ContextBuilder:
             "results": context_results
         }
 
+    # ======================================================
+    # Format context for LLM
+    # ======================================================
+
     def format_for_llm(
         self,
         context
     ):
-        """
-        Convert structured retrieval context
-        into a readable text representation.
-
-        This will later become the input context
-        for the answer-generation model.
-        """
 
         sections = []
 
@@ -184,6 +307,40 @@ class ContextBuilder:
                 f"{', '.join(result['sources'])}"
             )
 
+            # --------------------------------------------------
+            # Graph relationships
+            # --------------------------------------------------
+
+            sections.append(
+                "\nCode Graph Relationships:"
+            )
+
+            relationships = result.get(
+                "graph_relationships",
+                []
+            )
+
+            if relationships:
+
+                for relationship in relationships:
+
+                    sections.append(
+                        "- "
+                        + self._format_relationship(
+                            relationship
+                        )
+                    )
+
+            else:
+
+                sections.append(
+                    "- No graph relationships found"
+                )
+
+            # --------------------------------------------------
+            # Code
+            # --------------------------------------------------
+
             sections.append(
                 "\nCode:"
             )
@@ -191,6 +348,10 @@ class ContextBuilder:
             sections.append(
                 result["code"]
             )
+
+            # --------------------------------------------------
+            # Retrieval explanation
+            # --------------------------------------------------
 
             sections.append(
                 "\nWhy this result was retrieved:"
@@ -223,7 +384,10 @@ if __name__ == "__main__":
         "How does Flask register URL rules?"
     )
 
-    # Run hybrid retrieval
+    print(
+        "\nRunning hybrid retrieval..."
+    )
+
     retriever = HybridRetriever()
 
     results = retriever.search(
@@ -231,7 +395,14 @@ if __name__ == "__main__":
         top_k=5
     )
 
+    print(
+        f"Retrieved {len(results)} results."
+    )
+
+    # ------------------------------------------------------
     # Build context
+    # ------------------------------------------------------
+
     builder = ContextBuilder()
 
     context = builder.build(
@@ -239,20 +410,66 @@ if __name__ == "__main__":
         results
     )
 
-    # Display structured context
-    print(
-        "\nStructured Context\n"
-    )
+    # ------------------------------------------------------
+    # Display graph-aware context
+    # ------------------------------------------------------
 
     print(
-        json.dumps(
-            context,
-            indent=2,
-            ensure_ascii=False
+        "\n\nGraph-Aware Context\n"
+    )
+
+    for index, result in enumerate(
+        context["results"],
+        start=1
+    ):
+
+        print(
+            "=" * 70
         )
-    )
 
-    # Display LLM-ready context
+        print(
+            f"Result {index}: "
+            f"{result['qualified_name']}"
+        )
+
+        print(
+            f"File: {result['file']}"
+        )
+
+        print(
+            f"Line: {result['line']}"
+        )
+
+        print(
+            "\nCode Graph Relationships:"
+        )
+
+        relationships = result.get(
+            "graph_relationships",
+            []
+        )
+
+        if relationships:
+
+            for relationship in relationships:
+
+                print(
+                    "  - "
+                    + builder._format_relationship(
+                        relationship
+                    )
+                )
+
+        else:
+
+            print(
+                "  - No graph relationships found"
+            )
+
+    # ------------------------------------------------------
+    # LLM-ready context
+    # ------------------------------------------------------
+
     print(
         "\n\nLLM-Ready Context\n"
     )
