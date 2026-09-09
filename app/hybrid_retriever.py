@@ -6,6 +6,7 @@ from app.semantic_retriever import SemanticRetriever
 from app.graph_retriever import GraphRetriever
 from app.query_expander import expand_query
 from app.identifier_matcher import identifier_match_score
+from app.explanation_engine import ExplanationEngine
 
 
 DOCUMENTS_PATH = Path(
@@ -39,6 +40,11 @@ class HybridRetriever:
         # Initialize graph retriever
         self.graph = GraphRetriever()
 
+        # Initialize explanation engine
+        self.explanation_engine = (
+            ExplanationEngine()
+        )
+
     def search(
         self,
         query,
@@ -49,7 +55,7 @@ class HybridRetriever:
     ):
 
         # --------------------------------------------------
-        # 1. Expand query for lexical retrieval
+        # 1. Expand query
         # --------------------------------------------------
 
         expanded_query = expand_query(
@@ -67,8 +73,6 @@ class HybridRetriever:
 
         # --------------------------------------------------
         # 3. Semantic retrieval
-        #
-        # Semantic retrieval uses the original query.
         # --------------------------------------------------
 
         semantic_results = self.semantic.search(
@@ -77,7 +81,7 @@ class HybridRetriever:
         )
 
         # --------------------------------------------------
-        # 4. Select seeds for graph retrieval
+        # 4. Select graph seeds
         # --------------------------------------------------
 
         graph_seed_names = list(
@@ -124,17 +128,31 @@ class HybridRetriever:
 
             document_id = result.document_id
 
-            fused.setdefault(
-                document_id,
-                {
+            if document_id not in fused:
+
+                fused[document_id] = {
                     "result": result,
-                    "rrf_score": 0.0
+                    "rrf_score": 0.0,
+                    "sources": set(),
+                    "evidence": {}
                 }
+
+            contribution = (
+                1.0 / (rrf_k + rank)
             )
 
             fused[document_id]["rrf_score"] += (
-                1.0 / (rrf_k + rank)
+                contribution
             )
+
+            fused[document_id]["sources"].add(
+                "bm25"
+            )
+
+            fused[document_id]["evidence"]["bm25"] = {
+                "rank": rank,
+                "rrf_contribution": contribution
+            }
 
         # --------------------------------------------------
         # Semantic contribution
@@ -151,12 +169,27 @@ class HybridRetriever:
 
                 fused[document_id] = {
                     "result": result,
-                    "rrf_score": 0.0
+                    "rrf_score": 0.0,
+                    "sources": set(),
+                    "evidence": {}
                 }
 
-            fused[document_id]["rrf_score"] += (
+            contribution = (
                 1.0 / (rrf_k + rank)
             )
+
+            fused[document_id]["rrf_score"] += (
+                contribution
+            )
+
+            fused[document_id]["sources"].add(
+                "semantic"
+            )
+
+            fused[document_id]["evidence"]["semantic"] = {
+                "rank": rank,
+                "rrf_contribution": contribution
+            }
 
         # --------------------------------------------------
         # Graph contribution
@@ -190,12 +223,27 @@ class HybridRetriever:
                             "source": "graph",
                         }
                     )(),
-                    "rrf_score": 0.0
+                    "rrf_score": 0.0,
+                    "sources": set(),
+                    "evidence": {}
                 }
 
-            fused[document_id]["rrf_score"] += (
+            contribution = (
                 1.0 / (rrf_k + rank)
             )
+
+            fused[document_id]["rrf_score"] += (
+                contribution
+            )
+
+            fused[document_id]["sources"].add(
+                "graph"
+            )
+
+            fused[document_id]["evidence"]["graph"] = {
+                "rank": rank,
+                "rrf_contribution": contribution
+            }
 
         # --------------------------------------------------
         # 8. Identifier-aware scoring
@@ -226,6 +274,10 @@ class HybridRetriever:
                 )
             )
 
+            item["evidence"]["identifier"] = {
+                "score": identifier_score
+            }
+
         # --------------------------------------------------
         # 9. Final ranking
         # --------------------------------------------------
@@ -237,11 +289,14 @@ class HybridRetriever:
         )
 
         # --------------------------------------------------
-        # 10. Return results
+        # 10. Build final results
         # --------------------------------------------------
 
-        return [
-            {
+        results = []
+
+        for item in ranked[:top_k]:
+
+            result = {
                 "document_id":
                     item["result"].document_id,
 
@@ -266,16 +321,30 @@ class HybridRetriever:
                 "rerank_score":
                     None,
 
-                "source":
-                    item["result"].source,
+                "sources":
+                    sorted(item["sources"]),
+
+                "evidence":
+                    item["evidence"]
             }
-            for item in ranked[:top_k]
-        ]
+
+            # Generate human-readable explanation
+            result["explanation"] = (
+                self.explanation_engine.explain(
+                    result
+                )
+            )
+
+            results.append(
+                result
+            )
+
+        return results
 
 
-# ----------------------------------------------------------
-# Test the hybrid retriever
-# ----------------------------------------------------------
+# ==========================================================
+# Test
+# ==========================================================
 
 if __name__ == "__main__":
 
@@ -287,13 +356,11 @@ if __name__ == "__main__":
 
     results = retriever.search(
         query,
-        top_k=10
+        top_k=5
     )
 
     print(
-        "\nHybrid Results "
-        "(RRF + Query Expansion + "
-        "Identifier Boost):\n"
+        "\nCodebaseBrain Hybrid Search\n"
     )
 
     for rank, result in enumerate(
@@ -303,9 +370,44 @@ if __name__ == "__main__":
 
         print(
             f"{rank}. "
-            f"{result['qualified_name']} "
-            f"| RRF={result['rrf_score']:.6f} "
-            f"| ID={result['identifier_score']:.1f} "
-            f"| Final={result['final_score']:.6f} "
-            f"| {result['file']}:{result['line']}"
+            f"{result['qualified_name']}"
         )
+
+        print(
+            f"   Sources: "
+            f"{', '.join(result['sources'])}"
+        )
+
+        print(
+            f"   RRF: "
+            f"{result['rrf_score']:.6f}"
+        )
+
+        print(
+            f"   Identifier: "
+            f"{result['identifier_score']:.1f}"
+        )
+
+        print(
+            f"   Final: "
+            f"{result['final_score']:.6f}"
+        )
+
+        print(
+            f"   Location: "
+            f"{result['file']}:{result['line']}"
+        )
+
+        print(
+            "   Why relevant:"
+        )
+
+        for explanation in result[
+            "explanation"
+        ]:
+
+            print(
+                f"      ✓ {explanation}"
+            )
+
+        print()
