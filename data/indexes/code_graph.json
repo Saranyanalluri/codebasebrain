@@ -5867,7 +5867,7 @@
       "line": 689
     },
     {
-      "source": "App.decorator",
+      "source": "App.template_filter",
       "target": "App.add_template_filter",
       "type": "CALLS",
       "line": 693
@@ -5879,7 +5879,7 @@
       "line": 746
     },
     {
-      "source": "App.decorator",
+      "source": "App.template_test",
       "target": "App.add_template_test",
       "type": "CALLS",
       "line": 750
@@ -5891,7 +5891,7 @@
       "line": 800
     },
     {
-      "source": "App.decorator",
+      "source": "App.template_global",
       "target": "App.add_template_global",
       "type": "CALLS",
       "line": 804
@@ -5933,7 +5933,7 @@
       "line": 466
     },
     {
-      "source": "Blueprint.decorator",
+      "source": "Blueprint.app_template_filter",
       "target": "Blueprint.add_app_template_filter",
       "type": "CALLS",
       "line": 470
@@ -5951,7 +5951,7 @@
       "line": 522
     },
     {
-      "source": "Blueprint.decorator",
+      "source": "Blueprint.app_template_test",
       "target": "Blueprint.add_app_template_test",
       "type": "CALLS",
       "line": 526
@@ -5969,7 +5969,7 @@
       "line": 580
     },
     {
-      "source": "Blueprint.decorator",
+      "source": "Blueprint.app_template_global",
       "target": "Blueprint.add_app_template_global",
       "type": "CALLS",
       "line": 584
@@ -6005,7 +6005,7 @@
       "line": 650
     },
     {
-      "source": "Blueprint.decorator",
+      "source": "Blueprint.app_errorhandler",
       "target": "Blueprint.record_once",
       "type": "CALLS",
       "line": 667
@@ -6065,13 +6065,13 @@
       "line": 341
     },
     {
-      "source": "Scaffold.decorator",
+      "source": "Scaffold.route",
       "target": "Scaffold.add_url_rule",
       "type": "CALLS",
       "line": 370
     },
     {
-      "source": "Scaffold.decorator",
+      "source": "Scaffold.errorhandler",
       "target": "Scaffold.register_error_handler",
       "type": "CALLS",
       "line": 644

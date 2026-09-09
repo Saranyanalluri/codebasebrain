@@ -49,12 +49,38 @@ class CallVisitor(ast.NodeVisitor):
 
         previous_function = self.current_function
 
-        if self.current_class:
-            self.current_function = (
+        # Keep the outer function as the caller when
+        # analyzing nested functions.
+        #
+        # Example:
+        #
+        # Scaffold.route()
+        #     └── decorator()
+        #           └── self.add_url_rule()
+        #
+        # We represent the call as:
+        #
+        # Scaffold.route → self.add_url_rule
+        #
+        # rather than:
+        #
+        # Scaffold.decorator → self.add_url_rule
+
+        if self.current_function:
+
+            caller_name = self.current_function
+
+        elif self.current_class:
+
+            caller_name = (
                 f"{self.current_class}.{node.name}"
             )
+
         else:
-            self.current_function = node.name
+
+            caller_name = node.name
+
+        self.current_function = caller_name
 
         self.generic_visit(node)
 
@@ -76,9 +102,14 @@ class CallVisitor(ast.NodeVisitor):
 
     def get_call_name(self, node):
 
+        # foo()
         if isinstance(node, ast.Name):
+
             return node.id
 
+        # self.foo()
+        # obj.foo()
+        # module.foo()
         if isinstance(node, ast.Attribute):
 
             parts = []
@@ -89,13 +120,16 @@ class CallVisitor(ast.NodeVisitor):
                 current,
                 ast.Attribute
             ):
+
                 parts.append(current.attr)
+
                 current = current.value
 
             if isinstance(
                 current,
                 ast.Name
             ):
+
                 parts.append(current.id)
 
             parts.reverse()
@@ -111,6 +145,7 @@ def load_symbols():
         "r",
         encoding="utf-8"
     ) as file:
+
         return json.load(file)
 
 
@@ -121,6 +156,7 @@ def build_method_lookup(symbols):
     for symbol in symbols:
 
         if symbol["type"] == "method":
+
             methods.add(
                 symbol["qualified_name"]
             )
@@ -134,6 +170,7 @@ def build_inheritance_lookup():
         "r",
         encoding="utf-8"
     ) as file:
+
         graph = json.load(file)
 
     inheritance = {}
@@ -167,21 +204,33 @@ def resolve_self_call(
     if "." not in caller:
         return None
 
+    # For nested callers such as:
+    #
+    # Scaffold.route.decorator
+    #
+    # the actual class is still Scaffold.
     class_name = caller.split(".")[0]
 
     method_name = callee[
         len("self.") :
     ]
 
-    # First: current class
+    # -------------------------------------------------
+    # First: method in current class
+    # -------------------------------------------------
+
     candidate = (
         f"{class_name}.{method_name}"
     )
 
     if candidate in method_lookup:
+
         return candidate
 
-    # Second: inherited methods
+    # -------------------------------------------------
+    # Second: inherited method
+    # -------------------------------------------------
+
     visited = set()
 
     queue = list(
@@ -205,6 +254,7 @@ def resolve_self_call(
         )
 
         if candidate in method_lookup:
+
             return candidate
 
         queue.extend(
@@ -354,4 +404,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
