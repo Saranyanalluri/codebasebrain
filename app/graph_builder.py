@@ -2,34 +2,46 @@ import ast
 import json
 from pathlib import Path
 
+
 RESOLVED_IMPORTS_PATH = Path(
     "data/indexes/resolved_imports.json"
 )
+
+
 def load_resolved_imports():
 
     with RESOLVED_IMPORTS_PATH.open(
         "r",
         encoding="utf-8"
     ) as file:
+
         return json.load(file)
-    
+
+
 RESOLVED_CALLS_PATH = Path(
     "data/indexes/resolved_calls.json"
 )
+
+
 def load_resolved_calls():
 
     with RESOLVED_CALLS_PATH.open(
         "r",
         encoding="utf-8"
     ) as file:
+
         return json.load(file)
+
+
 REPOSITORY_PATH = Path(
     "data/repositories/flask/src/flask"
 )
 
+
 SYMBOLS_PATH = Path(
     "data/indexes/symbols.json"
 )
+
 
 GRAPH_PATH = Path(
     "data/indexes/code_graph.json"
@@ -37,18 +49,24 @@ GRAPH_PATH = Path(
 
 
 def load_symbols():
+
     with SYMBOLS_PATH.open(
         "r",
         encoding="utf-8"
     ) as file:
+
         return json.load(file)
 
 
 def build_symbol_lookup(symbols):
+
     lookup = {}
 
     for symbol in symbols:
-        lookup[symbol["qualified_name"]] = symbol
+
+        lookup[
+            symbol["qualified_name"]
+        ] = symbol
 
     return lookup
 
@@ -56,9 +74,12 @@ def build_symbol_lookup(symbols):
 def build_graph(symbols):
 
     nodes = symbols.copy()
+
     edges = []
 
-    lookup = build_symbol_lookup(symbols)
+    lookup = build_symbol_lookup(
+        symbols
+    )
 
     python_files = list(
         REPOSITORY_PATH.rglob("*.py")
@@ -70,7 +91,9 @@ def build_graph(symbols):
             encoding="utf-8"
         )
 
-        tree = ast.parse(source_code)
+        tree = ast.parse(
+            source_code
+        )
 
         relative_path = file_path.relative_to(
             REPOSITORY_PATH
@@ -86,9 +109,9 @@ def build_graph(symbols):
 
             class_name = node.name
 
-            # -------------------------
-            # DEFINES relationships
-            # -------------------------
+            # ==================================================
+            # DEFINES RELATIONSHIPS
+            # ==================================================
 
             for child in node.body:
 
@@ -107,29 +130,94 @@ def build_graph(symbols):
 
                 if method_name in lookup:
 
-                    edges.append({
-                        "source": class_name,
-                        "target": method_name,
-                        "type": "DEFINES",
-                        "file": str(relative_path),
-                        "line": child.lineno,
-                    })
+                    edges.append(
+                        {
+                            "source": class_name,
+                            "target": method_name,
+                            "type": "DEFINES",
+                            "file": str(
+                                relative_path
+                            ),
+                            "line": child.lineno,
+                        }
+                    )
 
-            # -------------------------
-            # INHERITS relationships
-            # -------------------------
+            # ==================================================
+            # CLASS INHERITANCE RELATIONSHIPS
+            # ==================================================
 
             for base in node.bases:
 
-                base_name = ast.unparse(base)
+                base_name = ast.unparse(
+                    base
+                )
 
-                edges.append({
-                    "source": class_name,
-                    "target": base_name,
-                    "type": "INHERITS",
-                    "file": str(relative_path),
-                    "line": node.lineno,
-                })
+                # ----------------------------------------------
+                # Class-level inheritance
+                # ----------------------------------------------
+
+                edges.append(
+                    {
+                        "source": class_name,
+                        "target": base_name,
+                        "type": "INHERITS",
+                        "file": str(
+                            relative_path
+                        ),
+                        "line": node.lineno,
+                    }
+                )
+
+                # ----------------------------------------------
+                # Method-level inheritance
+                # ----------------------------------------------
+
+                for child in node.body:
+
+                    if not isinstance(
+                        child,
+                        (
+                            ast.FunctionDef,
+                            ast.AsyncFunctionDef,
+                        ),
+                    ):
+                        continue
+
+                    method_name = child.name
+
+                    current_method = (
+                        f"{class_name}.{method_name}"
+                    )
+
+                    inherited_method = (
+                        f"{base_name}.{method_name}"
+                    )
+
+                    # Only create the relationship when
+                    # both methods exist in our symbol table.
+                    if (
+                        current_method in lookup
+                        and inherited_method in lookup
+                    ):
+
+                        edges.append(
+                            {
+                                "source":
+                                    current_method,
+
+                                "target":
+                                    inherited_method,
+
+                                "type":
+                                    "INHERITS_METHOD",
+
+                                "file":
+                                    str(relative_path),
+
+                                "line":
+                                    child.lineno,
+                            }
+                        )
 
     return {
         "nodes": nodes,
@@ -158,7 +246,9 @@ def save_graph(graph):
 
 def main():
 
-    print("Loading symbol table...")
+    print(
+        "Loading symbol table..."
+    )
 
     symbols = load_symbols()
 
@@ -166,20 +256,38 @@ def main():
         f"Loaded {len(symbols)} symbols."
     )
 
-    print("Building graph...")
+    print(
+        "Building graph..."
+    )
 
-    graph = build_graph(symbols)
-    resolved_calls = load_resolved_calls()
+    graph = build_graph(
+        symbols
+    )
+
+    # ==================================================
+    # ADD RESOLVED CALL RELATIONSHIPS
+    # ==================================================
+
+    resolved_calls = (
+        load_resolved_calls()
+    )
 
     graph["edges"].extend(
         resolved_calls
     )
 
-    resolved_imports = load_resolved_imports()
+    # ==================================================
+    # ADD RESOLVED IMPORT RELATIONSHIPS
+    # ==================================================
+
+    resolved_imports = (
+        load_resolved_imports()
+    )
 
     graph["edges"].extend(
         resolved_imports
-    )   
+    )
+
     print(
         f"Nodes: {len(graph['nodes'])}"
     )
@@ -188,7 +296,21 @@ def main():
         f"Edges: {len(graph['edges'])}"
     )
 
-    save_graph(graph)
+    # Count method inheritance edges
+    method_inheritance_count = sum(
+        1
+        for edge in graph["edges"]
+        if edge["type"] == "INHERITS_METHOD"
+    )
+
+    print(
+        "Method inheritance edges: "
+        f"{method_inheritance_count}"
+    )
+
+    save_graph(
+        graph
+    )
 
     print(
         f"Saved graph to: {GRAPH_PATH}"
@@ -196,4 +318,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()

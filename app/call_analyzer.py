@@ -36,12 +36,21 @@ class CallVisitor(ast.NodeVisitor):
 
         previous_function = self.current_function
 
-        if self.current_class:
-            self.current_function = (
+        # If we are already inside a function, this is a
+        # nested function. Keep the outer function as the
+        # caller for repository-level call analysis.
+        if self.current_function:
+            caller_name = self.current_function
+
+        elif self.current_class:
+            caller_name = (
                 f"{self.current_class}.{node.name}"
             )
+
         else:
-            self.current_function = node.name
+            caller_name = node.name
+
+        self.current_function = caller_name
 
         self.generic_visit(node)
 
@@ -69,10 +78,12 @@ class CallVisitor(ast.NodeVisitor):
 
         # foo()
         if isinstance(node, ast.Name):
+
             return node.id
 
         # self.foo()
         # obj.foo()
+        # module.foo()
         if isinstance(node, ast.Attribute):
 
             parts = []
@@ -83,13 +94,16 @@ class CallVisitor(ast.NodeVisitor):
                 current,
                 ast.Attribute
             ):
+
                 parts.append(current.attr)
+
                 current = current.value
 
             if isinstance(
                 current,
                 ast.Name
             ):
+
                 parts.append(current.id)
 
             parts.reverse()
@@ -140,4 +154,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()

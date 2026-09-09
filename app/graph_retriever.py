@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from collections import deque
 
 
 GRAPH_PATH = Path(
@@ -8,12 +9,15 @@ GRAPH_PATH = Path(
 
 
 class GraphRetriever:
+
     def __init__(self, graph_path=GRAPH_PATH):
+
         with open(
             graph_path,
             "r",
             encoding="utf-8"
         ) as file:
+
             graph = json.load(file)
 
         self.nodes = graph["nodes"]
@@ -27,6 +31,7 @@ class GraphRetriever:
         self.neighbors = {}
 
         for edge in self.edges:
+
             source = edge["source"]
             target = edge["target"]
 
@@ -43,34 +48,77 @@ class GraphRetriever:
     def search(
         self,
         seed_names,
-        top_k=5
+        top_k=5,
+        max_depth=2
     ):
+
         scores = {}
 
+        queue = deque()
+
+        visited = set()
+
+        # Start from seed symbols
         for seed_name in seed_names:
 
-            if seed_name not in self.neighbors:
+            if seed_name not in self.node_by_name:
                 continue
 
-            for edge in self.neighbors[seed_name]:
+            queue.append(
+                (
+                    seed_name,
+                    0
+                )
+            )
 
+            visited.add(seed_name)
+
+        while queue:
+
+            current, depth = queue.popleft()
+
+            if depth >= max_depth:
+                continue
+
+            for edge in self.neighbors.get(
+                current,
+                []
+            ):
+
+                # DEFINES connects classes/modules to
+                # their own methods and is not useful
+                # for semantic graph expansion.
                 if edge["type"] == "DEFINES":
                     continue
 
-                if edge["source"] == seed_name:
+                if edge["source"] == current:
                     neighbor = edge["target"]
                 else:
                     neighbor = edge["source"]
 
-                if neighbor == seed_name:
+                if neighbor == current:
                     continue
 
-                scores.setdefault(
-                    neighbor,
-                    0
+                # Closer nodes receive higher scores.
+                distance = depth + 1
+
+                score = 1 / distance
+
+                scores[neighbor] = (
+                    scores.get(neighbor, 0)
+                    + score
                 )
 
-                scores[neighbor] += 1
+                if neighbor not in visited:
+
+                    visited.add(neighbor)
+
+                    queue.append(
+                        (
+                            neighbor,
+                            distance
+                        )
+                    )
 
         ranked = sorted(
             scores.items(),
@@ -114,7 +162,8 @@ if __name__ == "__main__":
 
     results = retriever.search(
         seed_names,
-        top_k=10
+        top_k=10,
+        max_depth=2
     )
 
     print("\nGraph Results:\n")
@@ -123,9 +172,10 @@ if __name__ == "__main__":
         results,
         start=1
     ):
+
         print(
             f"{rank}. "
             f"{result['qualified_name']} "
-            f"| Graph={result['graph_score']} "
+            f"| Graph={result['graph_score']:.3f} "
             f"| {result['file']}:{result['line']}"
         )

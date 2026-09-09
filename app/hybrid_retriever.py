@@ -5,6 +5,7 @@ from app.bm25_retriever import BM25Retriever
 from app.semantic_retriever import SemanticRetriever
 from app.graph_retriever import GraphRetriever
 from app.query_expander import expand_query
+from app.identifier_matcher import identifier_match_score
 
 
 DOCUMENTS_PATH = Path(
@@ -43,7 +44,8 @@ class HybridRetriever:
         query,
         top_k=5,
         candidate_k=10,
-        rrf_k=60
+        rrf_k=60,
+        identifier_weight=0.02
     ):
 
         # --------------------------------------------------
@@ -196,28 +198,76 @@ class HybridRetriever:
             )
 
         # --------------------------------------------------
-        # 8. Final ranking using RRF
+        # 8. Identifier-aware scoring
+        # --------------------------------------------------
+
+        for item in fused.values():
+
+            qualified_name = (
+                item["result"].qualified_name
+            )
+
+            identifier_score = (
+                identifier_match_score(
+                    expanded_query,
+                    qualified_name
+                )
+            )
+
+            item["identifier_score"] = (
+                identifier_score
+            )
+
+            item["final_score"] = (
+                item["rrf_score"]
+                + (
+                    identifier_weight
+                    * identifier_score
+                )
+            )
+
+        # --------------------------------------------------
+        # 9. Final ranking
         # --------------------------------------------------
 
         ranked = sorted(
             fused.values(),
-            key=lambda item: item["rrf_score"],
+            key=lambda item: item["final_score"],
             reverse=True
         )
 
         # --------------------------------------------------
-        # 9. Return results
+        # 10. Return results
         # --------------------------------------------------
 
         return [
             {
-                "document_id": item["result"].document_id,
-                "qualified_name": item["result"].qualified_name,
-                "file": item["result"].file,
-                "line": item["result"].line,
-                "rrf_score": item["rrf_score"],
-                "rerank_score": None,
-                "source": item["result"].source,
+                "document_id":
+                    item["result"].document_id,
+
+                "qualified_name":
+                    item["result"].qualified_name,
+
+                "file":
+                    item["result"].file,
+
+                "line":
+                    item["result"].line,
+
+                "rrf_score":
+                    item["rrf_score"],
+
+                "identifier_score":
+                    item["identifier_score"],
+
+                "final_score":
+                    item["final_score"],
+
+                "rerank_score":
+                    None,
+
+                "source":
+                    item["result"].source,
             }
             for item in ranked[:top_k]
         ]
@@ -232,8 +282,7 @@ if __name__ == "__main__":
     retriever = HybridRetriever()
 
     query = (
-        "how does Flask dispatch "
-        "an incoming HTTP request"
+        "How does Flask register URL rules?"
     )
 
     results = retriever.search(
@@ -243,7 +292,8 @@ if __name__ == "__main__":
 
     print(
         "\nHybrid Results "
-        "(RRF + Query Expansion):\n"
+        "(RRF + Query Expansion + "
+        "Identifier Boost):\n"
     )
 
     for rank, result in enumerate(
@@ -255,5 +305,7 @@ if __name__ == "__main__":
             f"{rank}. "
             f"{result['qualified_name']} "
             f"| RRF={result['rrf_score']:.6f} "
+            f"| ID={result['identifier_score']:.1f} "
+            f"| Final={result['final_score']:.6f} "
             f"| {result['file']}:{result['line']}"
         )

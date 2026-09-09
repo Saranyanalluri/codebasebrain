@@ -3083,6 +3083,20 @@
       "line": 110
     },
     {
+      "source": "Flask.__init__",
+      "target": "App.__init__",
+      "type": "INHERITS_METHOD",
+      "file": "app.py",
+      "line": 311
+    },
+    {
+      "source": "Flask.create_jinja_environment",
+      "target": "App.create_jinja_environment",
+      "type": "INHERITS_METHOD",
+      "file": "app.py",
+      "line": 470
+    },
+    {
       "source": "Blueprint",
       "target": "Blueprint.__init__",
       "type": "DEFINES",
@@ -3769,6 +3783,20 @@
       "line": 284
     },
     {
+      "source": "SecureCookieSessionInterface.open_session",
+      "target": "SessionInterface.open_session",
+      "type": "INHERITS_METHOD",
+      "file": "sessions.py",
+      "line": 323
+    },
+    {
+      "source": "SecureCookieSessionInterface.save_session",
+      "target": "SessionInterface.save_session",
+      "type": "INHERITS_METHOD",
+      "file": "sessions.py",
+      "line": 337
+    },
+    {
       "source": "Environment",
       "target": "Environment.__init__",
       "type": "DEFINES",
@@ -3965,6 +3993,13 @@
       "line": 138
     },
     {
+      "source": "MethodView.dispatch_request",
+      "target": "View.dispatch_request",
+      "type": "INHERITS_METHOD",
+      "file": "views.py",
+      "line": 182
+    },
+    {
       "source": "Request",
       "target": "Request.max_content_length",
       "type": "DEFINES",
@@ -4140,6 +4175,27 @@
       "line": 124
     },
     {
+      "source": "DefaultJSONProvider.dumps",
+      "target": "JSONProvider.dumps",
+      "type": "INHERITS_METHOD",
+      "file": "json\\provider.py",
+      "line": 166
+    },
+    {
+      "source": "DefaultJSONProvider.loads",
+      "target": "JSONProvider.loads",
+      "type": "INHERITS_METHOD",
+      "file": "json\\provider.py",
+      "line": 181
+    },
+    {
+      "source": "DefaultJSONProvider.response",
+      "target": "JSONProvider.response",
+      "type": "INHERITS_METHOD",
+      "file": "json\\provider.py",
+      "line": 189
+    },
+    {
       "source": "JSONTag",
       "target": "JSONTag.__init__",
       "type": "DEFINES",
@@ -4203,6 +4259,27 @@
       "line": 93
     },
     {
+      "source": "TagDict.check",
+      "target": "JSONTag.check",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 103
+    },
+    {
+      "source": "TagDict.to_json",
+      "target": "JSONTag.to_json",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 110
+    },
+    {
+      "source": "TagDict.to_python",
+      "target": "JSONTag.to_python",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 114
+    },
+    {
       "source": "PassDict",
       "target": "PassDict.check",
       "type": "DEFINES",
@@ -4222,6 +4299,20 @@
       "type": "INHERITS",
       "file": "json\\tag.py",
       "line": 119
+    },
+    {
+      "source": "PassDict.check",
+      "target": "JSONTag.check",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 122
+    },
+    {
+      "source": "PassDict.to_json",
+      "target": "JSONTag.to_json",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 125
     },
     {
       "source": "TagTuple",
@@ -4252,6 +4343,27 @@
       "line": 133
     },
     {
+      "source": "TagTuple.check",
+      "target": "JSONTag.check",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 137
+    },
+    {
+      "source": "TagTuple.to_json",
+      "target": "JSONTag.to_json",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 140
+    },
+    {
+      "source": "TagTuple.to_python",
+      "target": "JSONTag.to_python",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 143
+    },
+    {
       "source": "PassList",
       "target": "PassList.check",
       "type": "DEFINES",
@@ -4271,6 +4383,20 @@
       "type": "INHERITS",
       "file": "json\\tag.py",
       "line": 147
+    },
+    {
+      "source": "PassList.check",
+      "target": "JSONTag.check",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 150
+    },
+    {
+      "source": "PassList.to_json",
+      "target": "JSONTag.to_json",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 153
     },
     {
       "source": "TagBytes",
@@ -4301,6 +4427,27 @@
       "line": 159
     },
     {
+      "source": "TagBytes.check",
+      "target": "JSONTag.check",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 163
+    },
+    {
+      "source": "TagBytes.to_json",
+      "target": "JSONTag.to_json",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 166
+    },
+    {
+      "source": "TagBytes.to_python",
+      "target": "JSONTag.to_python",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 169
+    },
+    {
       "source": "TagMarkup",
       "target": "TagMarkup.check",
       "type": "DEFINES",
@@ -4327,6 +4474,27 @@
       "type": "INHERITS",
       "file": "json\\tag.py",
       "line": 173
+    },
+    {
+      "source": "TagMarkup.check",
+      "target": "JSONTag.check",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 181
+    },
+    {
+      "source": "TagMarkup.to_json",
+      "target": "JSONTag.to_json",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 184
+    },
+    {
+      "source": "TagMarkup.to_python",
+      "target": "JSONTag.to_python",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 187
     },
     {
       "source": "TagUUID",
@@ -4357,6 +4525,27 @@
       "line": 191
     },
     {
+      "source": "TagUUID.check",
+      "target": "JSONTag.check",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 195
+    },
+    {
+      "source": "TagUUID.to_json",
+      "target": "JSONTag.to_json",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 198
+    },
+    {
+      "source": "TagUUID.to_python",
+      "target": "JSONTag.to_python",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 201
+    },
+    {
       "source": "TagDateTime",
       "target": "TagDateTime.check",
       "type": "DEFINES",
@@ -4383,6 +4572,27 @@
       "type": "INHERITS",
       "file": "json\\tag.py",
       "line": 205
+    },
+    {
+      "source": "TagDateTime.check",
+      "target": "JSONTag.check",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 209
+    },
+    {
+      "source": "TagDateTime.to_json",
+      "target": "JSONTag.to_json",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 212
+    },
+    {
+      "source": "TagDateTime.to_python",
+      "target": "JSONTag.to_python",
+      "type": "INHERITS_METHOD",
+      "file": "json\\tag.py",
+      "line": 215
     },
     {
       "source": "TaggedJSONSerializer",
@@ -4686,6 +4896,27 @@
       "line": 59
     },
     {
+      "source": "App.__init__",
+      "target": "Scaffold.__init__",
+      "type": "INHERITS_METHOD",
+      "file": "sansio\\app.py",
+      "line": 279
+    },
+    {
+      "source": "App._check_setup_finished",
+      "target": "Scaffold._check_setup_finished",
+      "type": "INHERITS_METHOD",
+      "file": "sansio\\app.py",
+      "line": 410
+    },
+    {
+      "source": "App.add_url_rule",
+      "target": "Scaffold.add_url_rule",
+      "type": "INHERITS_METHOD",
+      "file": "sansio\\app.py",
+      "line": 605
+    },
+    {
       "source": "BlueprintSetupState",
       "target": "BlueprintSetupState.__init__",
       "type": "DEFINES",
@@ -4901,6 +5132,27 @@
       "type": "INHERITS",
       "file": "sansio\\blueprints.py",
       "line": 119
+    },
+    {
+      "source": "Blueprint.__init__",
+      "target": "Scaffold.__init__",
+      "type": "INHERITS_METHOD",
+      "file": "sansio\\blueprints.py",
+      "line": 174
+    },
+    {
+      "source": "Blueprint._check_setup_finished",
+      "target": "Scaffold._check_setup_finished",
+      "type": "INHERITS_METHOD",
+      "file": "sansio\\blueprints.py",
+      "line": 213
+    },
+    {
+      "source": "Blueprint.add_url_rule",
+      "target": "Scaffold.add_url_rule",
+      "type": "INHERITS_METHOD",
+      "file": "sansio\\blueprints.py",
+      "line": 413
     },
     {
       "source": "Scaffold",
