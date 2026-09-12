@@ -6,18 +6,20 @@ class AnswerGenerator:
     """
     Repository-agnostic deterministic answer generator.
 
-    Uses:
-    - AST analysis for code behavior
-    - retrieval evidence
-    - code graph relationships
-    - implementation hierarchy
+    Responsibilities:
+    - Explain the highest-ranked retrieved implementation.
+    - Use AST analysis to describe behavior at a high level.
+    - Include retrieval evidence.
+    - Include code-graph relationships when available.
+    - Show related implementations when useful.
 
-    The generator intentionally produces high-level explanations
-    instead of translating every low-level function call into prose.
+    Important:
+    The AnswerGenerator does NOT re-rank retrieval results.
+    HybridRetriever is responsible for ranking.
     """
 
-    # Low-level / language utility calls that should not normally
-    # appear in the natural-language explanation.
+    # Low-level / language utility calls that should normally not appear
+    # directly in natural-language explanations.
     IGNORED_CALLS = {
         # Exceptions
         "RuntimeError",
@@ -43,7 +45,7 @@ class AnswerGenerator:
         "cast",
         "t.cast",
 
-        # Common collection/string helpers
+        # Collection/string helpers
         "pop",
         "set",
         "get",
@@ -66,9 +68,10 @@ class AnswerGenerator:
                 "in the indexed repository."
             )
 
-        primary = self._choose_key_implementation(
-            results
-        )
+        # IMPORTANT:
+        # ContextBuilder preserves HybridRetriever ordering.
+        # The first result is therefore the primary implementation.
+        primary = self._choose_key_implementation(results)
 
         if not primary:
             return (
@@ -91,14 +94,10 @@ class AnswerGenerator:
         )
 
         if path:
-            lines.append(
-                "Implementation path:"
-            )
+            lines.append("Implementation path:")
 
             for item in path:
-                lines.append(
-                    f"- {item}"
-                )
+                lines.append(f"- {item}")
 
             lines.append("")
 
@@ -135,9 +134,7 @@ class AnswerGenerator:
 
         if explanation:
             lines.append("")
-            lines.append(
-                explanation
-            )
+            lines.append(explanation)
 
         structure = self._implementation_structure(
             results,
@@ -146,14 +143,10 @@ class AnswerGenerator:
 
         if structure:
             lines.append("")
-            lines.append(
-                "Implementation structure:"
-            )
+            lines.append("Implementation structure:")
 
             for item in structure:
-                lines.append(
-                    f"- {item}"
-                )
+                lines.append(f"- {item}")
 
         # ------------------------------------------------------------
         # Graph evidence
@@ -178,9 +171,7 @@ class AnswerGenerator:
 
         if formatted_relationships:
             lines.append("")
-            lines.append(
-                "Code graph evidence:"
-            )
+            lines.append("Code graph evidence:")
 
             for relationship in formatted_relationships[:8]:
                 lines.append(
@@ -282,9 +273,7 @@ class AnswerGenerator:
             "```"
         )
 
-        return "\n".join(
-            lines
-        )
+        return "\n".join(lines)
 
     # ================================================================
     # Implementation selection
@@ -295,85 +284,17 @@ class AnswerGenerator:
         results,
     ):
         """
-        Select the most useful implementation.
+        Select the highest-ranked result from HybridRetriever.
 
-        Concrete implementations are preferred over abstract
-        contracts that only raise NotImplementedError.
+        HybridRetriever is responsible for relevance ranking.
+        The AnswerGenerator must not introduce a second ranking
+        mechanism based on AST complexity or arbitrary bonuses.
         """
 
         if not results:
             return {}
 
-        candidates = []
-
-        for index, result in enumerate(
-            results
-        ):
-            score = float(
-                result.get(
-                    "final_score",
-                    0,
-                )
-            )
-
-            code = result.get(
-                "code",
-                "",
-            )
-
-            # Strongly penalize abstract implementations.
-            if self._is_not_implemented(
-                code
-            ):
-                score -= 10
-
-            # Reward real implementation logic.
-            if self._has_ast_node(
-                code,
-                ast.Assign,
-            ):
-                score += 0.5
-
-            if self._has_ast_node(
-                code,
-                ast.If,
-            ):
-                score += 0.3
-
-            if self._has_ast_node(
-                code,
-                ast.Return,
-            ):
-                score += 0.2
-
-            useful_calls = (
-                self._count_useful_calls(
-                    code
-                )
-            )
-
-            score += min(
-                useful_calls * 0.05,
-                0.5,
-            )
-
-            candidates.append(
-                (
-                    score,
-                    -index,
-                    result,
-                )
-            )
-
-        candidates.sort(
-            key=lambda item: (
-                item[0],
-                item[1],
-            ),
-            reverse=True,
-        )
-
-        return candidates[0][2]
+        return results[0]
 
     # ================================================================
     # Implementation path
@@ -419,9 +340,7 @@ class AnswerGenerator:
 
         for operation in operations:
             if operation not in path:
-                path.append(
-                    operation
-                )
+                path.append(operation)
 
         return path
 
@@ -460,9 +379,7 @@ class AnswerGenerator:
                 current
             )
 
-        return " ".join(
-            words
-        )
+        return " ".join(words)
 
     # ================================================================
     # Semantic AST analysis
@@ -475,18 +392,20 @@ class AnswerGenerator:
         """
         Convert AST patterns into high-level semantic operations.
 
-        Instead of saying:
+        Avoid translating low-level implementation details such as:
 
             options.pop()
             item.upper()
             self.url_map.add()
             _endpoint_from_view_func()
 
-        the generator tries to say:
+        directly into prose.
+
+        Instead, recognize higher-level operations such as:
 
             determines endpoint and methods
-            creates and registers the URL rule
-            associates the endpoint with the view function
+            creates and registers URL rule
+            associates endpoint with view function
         """
 
         if not code:
@@ -616,20 +535,17 @@ class AnswerGenerator:
             )
 
         if has_url_map_add:
-
             operations.append(
                 "It creates a URL rule and adds it to "
                 "the application's URL map."
             )
 
         elif has_url_rule_class:
-
             operations.append(
                 "It creates a URL rule for the endpoint."
             )
 
         if has_view_function_assignment:
-
             operations.append(
                 "It associates the endpoint with "
                 "the view function."
@@ -716,26 +632,22 @@ class AnswerGenerator:
         )
 
         if has_http_exception_handler:
-
             operations.append(
                 "It delegates HTTP exceptions to the "
                 "HTTP exception handler."
             )
 
         if has_error_handler_lookup:
-
             operations.append(
                 "It looks up a registered error handler."
             )
 
         if has_log_exception:
-
             operations.append(
                 "It logs the unhandled exception."
             )
 
         if has_finalize_request:
-
             operations.append(
                 "It finalizes the generated response."
             )
@@ -749,12 +661,12 @@ class AnswerGenerator:
                 tree,
                 {
                     "send_from_directory",
+                    "flask.send_from_directory",
                 },
             )
         )
 
         if has_send_from_directory:
-
             operations.append(
                 "It serves the requested file from "
                 "the configured static directory."
@@ -774,7 +686,6 @@ class AnswerGenerator:
         )
 
         if has_make_response:
-
             operations.append(
                 "It converts the result into a response object."
             )
@@ -783,9 +694,10 @@ class AnswerGenerator:
         # RETURN BEHAVIOR
         # ============================================================
 
-        for node in ast.walk(
-            tree
-        ):
+        return_descriptions = []
+
+        for node in ast.walk(tree):
+
             if not isinstance(
                 node,
                 ast.Return,
@@ -799,8 +711,18 @@ class AnswerGenerator:
             )
 
             if description:
+                return_descriptions.append(
+                    description
+                )
+
+        for description in return_descriptions:
+            sentence = (
+                f"It returns {description}."
+            )
+
+            if sentence not in operations:
                 operations.append(
-                    f"It returns {description}."
+                    sentence
                 )
 
         # ============================================================
@@ -828,9 +750,7 @@ class AnswerGenerator:
                     ast.Match,
                 ),
             )
-            for node in ast.walk(
-                tree
-            )
+            for node in ast.walk(tree)
         )
 
         if branch_count:
@@ -886,7 +806,6 @@ class AnswerGenerator:
                 for line in paragraph.splitlines()
             )
 
-            # Avoid dumping huge documentation blocks.
             if len(paragraph) > 300:
                 paragraph = (
                     paragraph[:297]
@@ -907,16 +826,11 @@ class AnswerGenerator:
             )
         )
 
-        # Don't repeat the branch statement here if it is already
-        # present in the semantic operation list.
         behavior = self._deduplicate(
             behavior
         )
 
         if behavior:
-
-            # Remove the first implementation-path style statement
-            # if it isn't useful as behavioral documentation.
             sections.append(
                 "Behavior: "
                 + " ".join(
@@ -944,7 +858,7 @@ class AnswerGenerator:
         # return self.ensure_sync(
         #     self.view_functions[rule.endpoint]
         # )(**view_args)
-        #
+
         if isinstance(
             value,
             ast.Call,
@@ -979,7 +893,6 @@ class AnswerGenerator:
             )
 
             if call_name:
-
                 return (
                     f"the result of "
                     f"`{call_name}()`"
@@ -1026,9 +939,8 @@ class AnswerGenerator:
         tree,
         names,
     ):
-        for node in ast.walk(
-            tree
-        ):
+        for node in ast.walk(tree):
+
             if not isinstance(
                 node,
                 ast.Call,
@@ -1051,9 +963,8 @@ class AnswerGenerator:
         tree,
         name,
     ):
-        for node in ast.walk(
-            tree
-        ):
+        for node in ast.walk(tree):
+
             if not isinstance(
                 node,
                 ast.Assign,
@@ -1075,9 +986,8 @@ class AnswerGenerator:
         tree,
         text,
     ):
-        for node in ast.walk(
-            tree
-        ):
+        for node in ast.walk(tree):
+
             if not isinstance(
                 node,
                 ast.Assign,
@@ -1137,9 +1047,7 @@ class AnswerGenerator:
                 node,
                 node_type,
             )
-            for node in ast.walk(
-                tree
-            )
+            for node in ast.walk(tree)
         )
 
     def _get_raised_exception_names(
@@ -1156,9 +1064,8 @@ class AnswerGenerator:
         except SyntaxError:
             return names
 
-        for node in ast.walk(
-            tree
-        ):
+        for node in ast.walk(tree):
+
             if not isinstance(
                 node,
                 ast.Raise,
@@ -1279,86 +1186,6 @@ class AnswerGenerator:
             parts
         )
 
-    def _current_method_name(
-        self,
-        code,
-    ):
-        try:
-            tree = ast.parse(
-                textwrap.dedent(code)
-            )
-
-        except SyntaxError:
-            return ""
-
-        for node in ast.walk(
-            tree
-        ):
-            if isinstance(
-                node,
-                (
-                    ast.FunctionDef,
-                    ast.AsyncFunctionDef,
-                ),
-            ):
-                return node.name
-
-        return ""
-
-    def _count_useful_calls(
-        self,
-        code,
-    ):
-        try:
-            tree = ast.parse(
-                textwrap.dedent(code)
-            )
-
-        except SyntaxError:
-            return 0
-
-        current_method = (
-            self._current_method_name(
-                code
-            )
-        )
-
-        count = 0
-
-        for node in ast.walk(
-            tree
-        ):
-            if not isinstance(
-                node,
-                ast.Call,
-            ):
-                continue
-
-            name = (
-                self._get_call_name(
-                    node
-                )
-            )
-
-            if not name:
-                continue
-
-            if name in self.IGNORED_CALLS:
-                continue
-
-            if (
-                name.startswith(
-                    "self."
-                )
-                and name.split(".")[-1]
-                == current_method
-            ):
-                continue
-
-            count += 1
-
-        return count
-
     # ================================================================
     # Graph relationships
     # ================================================================
@@ -1429,7 +1256,7 @@ class AnswerGenerator:
         if not source or not target:
             return ""
 
-        # DEFINES is usually not useful in the final explanation.
+        # DEFINES is normally not useful to the final answer.
         if rel_type == "DEFINES":
             return ""
 
@@ -1469,62 +1296,85 @@ class AnswerGenerator:
         results,
         primary,
     ):
-        primary_name = primary.get(
-            "qualified_name",
-            "",
-        )
+        """Build a meaningful implementation hierarchy.
+
+        Explicit graph relationships are preferred over simply grouping
+        methods with the same name.
+        """
+        primary_name = primary.get("qualified_name", "")
 
         if not primary_name:
             return []
 
-        method_name = (
-            primary_name.split(
-                "."
-            )[-1]
-        )
+        structure = []
+        relationships = primary.get("graph_relationships", [])
 
+        # Explicit method inheritance.
+        for relationship in relationships:
+            if not isinstance(relationship, dict):
+                continue
+
+            relationship_type = str(
+                relationship.get("type", "")
+            ).upper()
+
+            source = relationship.get("source", "")
+            target = relationship.get("target", "")
+
+            if (
+                relationship_type == "INHERITS_METHOD"
+                and source == primary_name
+                and target
+            ):
+                structure.append(
+                    f"`{source}` inherits its method implementation "
+                    f"from `{target}`."
+                )
+
+        # Class inheritance.
+        for relationship in relationships:
+            if not isinstance(relationship, dict):
+                continue
+
+            relationship_type = str(
+                relationship.get("type", "")
+            ).upper()
+
+            source = relationship.get("source", "")
+            target = relationship.get("target", "")
+
+            if (
+                relationship_type == "INHERITS"
+                and source == primary_name
+                and target
+            ):
+                structure.append(
+                    f"`{source}` inherits from `{target}`."
+                )
+
+        # Other retrieved implementations of the same method.
+        method_name = primary_name.split(".")[-1]
         related = []
 
         for result in results:
+            name = result.get("qualified_name", "")
 
-            name = result.get(
-                "qualified_name",
-                "",
+            if not name or name == primary_name:
+                continue
+
+            if name.split(".")[-1] != method_name:
+                continue
+
+            related.append(name)
+
+        if related:
+            names = [primary_name] + related
+            structure.append(
+                f"Related implementations of `{method_name}` were "
+                f"retrieved: {', '.join(names)}."
             )
 
-            if not name:
-                continue
-
-            if name == primary_name:
-                continue
-
-            if (
-                name.split(".")[-1]
-                != method_name
-            ):
-                continue
-
-            related.append(
-                result
-            )
-
-        if not related:
-            return []
-
-        names = [
-            primary_name
-        ]
-
-        names.extend(
-            item["qualified_name"]
-            for item in related
-        )
-
-        return [
-            f"Multiple implementations of "
-            f"`{method_name}` were retrieved: "
-            f"{', '.join(names)}."
-        ]
+        return self._deduplicate(structure)
 
     # ================================================================
     # Related implementations
@@ -1535,44 +1385,51 @@ class AnswerGenerator:
         results,
         primary,
     ):
-        primary_name = primary.get(
-            "qualified_name",
-            "",
-        )
+        """Return related implementations with inherited targets first."""
+        primary_name = primary.get("qualified_name", "")
 
         if not primary_name:
             return []
 
-        method_name = (
-            primary_name.split(
-                "."
-            )[-1]
-        )
-
         related = []
+        inheritance_targets = []
+
+        # Explicit method-inheritance targets get priority.
+        for relationship in primary.get("graph_relationships", []):
+            if not isinstance(relationship, dict):
+                continue
+
+            if str(relationship.get("type", "")).upper() != "INHERITS_METHOD":
+                continue
+
+            if relationship.get("source") != primary_name:
+                continue
+
+            target = relationship.get("target", "")
+
+            if target and target not in inheritance_targets:
+                inheritance_targets.append(target)
+
+        for target in inheritance_targets:
+            for result in results:
+                if result.get("qualified_name") == target:
+                    related.append(result)
+                    break
+
+        # Then add other implementations of the same method.
+        method_name = primary_name.split(".")[-1]
 
         for result in results:
+            name = result.get("qualified_name", "")
 
-            name = result.get(
-                "qualified_name",
-                "",
-            )
-
-            if not name:
+            if not name or name == primary_name:
                 continue
 
-            if name == primary_name:
+            if name.split(".")[-1] != method_name:
                 continue
 
-            if (
-                name.split(".")[-1]
-                != method_name
-            ):
-                continue
-
-            related.append(
-                result
-            )
+            if result not in related:
+                related.append(result)
 
         return related[:5]
 

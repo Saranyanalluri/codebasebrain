@@ -28,6 +28,10 @@ class GraphRetriever:
             for node in self.nodes
         }
 
+        # --------------------------------------------------
+        # Build bidirectional adjacency list
+        # --------------------------------------------------
+
         self.neighbors = {}
 
         for edge in self.edges:
@@ -45,6 +49,49 @@ class GraphRetriever:
                 []
             ).append(edge)
 
+
+    # ======================================================
+    # Edge weighting
+    # ======================================================
+
+    @staticmethod
+    def _edge_weight(edge_type):
+
+        """
+        Assign different strengths to different
+        code relationships.
+
+        INHERITS_METHOD is especially important because
+        it connects an API-facing implementation to the
+        method where the behavior is defined.
+        """
+
+        weights = {
+
+            # Strong relationship:
+            # subclass method -> inherited/base method
+            "INHERITS_METHOD": 2.0,
+
+            # Direct function/method invocation
+            "CALLS": 1.5,
+
+            # Module/class import relationship
+            "IMPORTS": 1.0,
+
+            # Defines is deliberately not traversed.
+            "DEFINES": 0.0
+        }
+
+        return weights.get(
+            edge_type,
+            1.0
+        )
+
+
+    # ======================================================
+    # Graph search
+    # ======================================================
+
     def search(
         self,
         seed_names,
@@ -56,9 +103,16 @@ class GraphRetriever:
 
         queue = deque()
 
-        visited = set()
+        # --------------------------------------------------
+        # Track the shortest known distance.
+        # --------------------------------------------------
 
+        visited_distance = {}
+
+        # --------------------------------------------------
         # Start from seed symbols
+        # --------------------------------------------------
+
         for seed_name in seed_names:
 
             if seed_name not in self.node_by_name:
@@ -71,7 +125,14 @@ class GraphRetriever:
                 )
             )
 
-            visited.add(seed_name)
+            visited_distance[
+                seed_name
+            ] = 0
+
+
+        # --------------------------------------------------
+        # Breadth-first graph traversal
+        # --------------------------------------------------
 
         while queue:
 
@@ -85,33 +146,81 @@ class GraphRetriever:
                 []
             ):
 
-                # DEFINES connects classes/modules to
-                # their own methods and is not useful
-                # for semantic graph expansion.
-                if edge["type"] == "DEFINES":
+                edge_type = edge["type"]
+
+                # ------------------------------------------
+                # DEFINES is not useful for retrieval.
+                # ------------------------------------------
+
+                if edge_type == "DEFINES":
                     continue
 
+                # ------------------------------------------
+                # Determine neighboring node.
+                # ------------------------------------------
+
                 if edge["source"] == current:
+
                     neighbor = edge["target"]
+
                 else:
+
                     neighbor = edge["source"]
 
                 if neighbor == current:
                     continue
 
-                # Closer nodes receive higher scores.
+                # ------------------------------------------
+                # Distance
+                # ------------------------------------------
+
                 distance = depth + 1
 
-                score = 1 / distance
+                # ------------------------------------------
+                # Edge-specific relationship strength
+                # ------------------------------------------
+
+                edge_weight = self._edge_weight(
+                    edge_type
+                )
+
+                # ------------------------------------------
+                # Distance decay
+                # ------------------------------------------
+
+                score = (
+                    edge_weight
+                    / distance
+                )
 
                 scores[neighbor] = (
-                    scores.get(neighbor, 0)
+                    scores.get(
+                        neighbor,
+                        0.0
+                    )
                     + score
                 )
 
-                if neighbor not in visited:
+                # ------------------------------------------
+                # Continue traversal only when this node
+                # has not already been reached at an
+                # equal or shorter distance.
+                # ------------------------------------------
 
-                    visited.add(neighbor)
+                previous_distance = (
+                    visited_distance.get(
+                        neighbor
+                    )
+                )
+
+                if (
+                    previous_distance is None
+                    or distance < previous_distance
+                ):
+
+                    visited_distance[
+                        neighbor
+                    ] = distance
 
                     queue.append(
                         (
@@ -120,15 +229,27 @@ class GraphRetriever:
                         )
                     )
 
+
+        # --------------------------------------------------
+        # Ranking
+        # --------------------------------------------------
+
         ranked = sorted(
             scores.items(),
             key=lambda item: item[1],
             reverse=True
         )
 
+
+        # --------------------------------------------------
+        # Build results
+        # --------------------------------------------------
+
         results = []
 
-        for qualified_name, score in ranked[:top_k]:
+        for qualified_name, score in ranked[
+            :top_k
+        ]:
 
             node = self.node_by_name.get(
                 qualified_name
@@ -139,25 +260,42 @@ class GraphRetriever:
 
             results.append(
                 {
-                    "qualified_name": qualified_name,
-                    "type": node["type"],
-                    "file": node["file"],
-                    "line": node["line"],
-                    "graph_score": score,
+                    "qualified_name":
+                        qualified_name,
+
+                    "type":
+                        node["type"],
+
+                    "file":
+                        node["file"],
+
+                    "line":
+                        node["line"],
+
+                    "graph_score":
+                        score,
                 }
             )
 
         return results
 
 
+# ==========================================================
+# Test
+# ==========================================================
+
 if __name__ == "__main__":
 
     retriever = GraphRetriever()
 
     seed_names = [
+
         "Flask.full_dispatch_request",
+
         "Flask.dispatch_request",
+
         "Flask.wsgi_app",
+
     ]
 
     results = retriever.search(
@@ -166,7 +304,9 @@ if __name__ == "__main__":
         max_depth=2
     )
 
-    print("\nGraph Results:\n")
+    print(
+        "\nGraph Results:\n"
+    )
 
     for rank, result in enumerate(
         results,
@@ -176,6 +316,9 @@ if __name__ == "__main__":
         print(
             f"{rank}. "
             f"{result['qualified_name']} "
-            f"| Graph={result['graph_score']:.3f} "
-            f"| {result['file']}:{result['line']}"
+            f"| Graph="
+            f"{result['graph_score']:.3f} "
+            f"| "
+            f"{result['file']}:"
+            f"{result['line']}"
         )
