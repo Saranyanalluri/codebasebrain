@@ -1,16 +1,14 @@
+import sys
+
 from app.hybrid_retriever import HybridRetriever
 from app.context_builder import ContextBuilder
-from app.answer_generator import AnswerGenerator
+from app.llm_answer_generator import LLMAnswerGenerator
 
 
-def run_pipeline(query):
+def run_pipeline(query, provider="mock"):
     print("=" * 70)
     print("CODEBASEBRAIN")
     print("=" * 70)
-
-    # ---------------------------------------------------------
-    # Step 1: Hybrid Retrieval
-    # ---------------------------------------------------------
 
     print("\n[1] Searching repository...")
 
@@ -24,10 +22,6 @@ def run_pipeline(query):
 
     print(f"Retrieved {len(results)} relevant code components.")
 
-    # ---------------------------------------------------------
-    # Step 2: Build Context
-    # ---------------------------------------------------------
-
     print("\n[2] Building code context...")
 
     context_builder = ContextBuilder()
@@ -40,22 +34,14 @@ def run_pipeline(query):
 
     print(f"Context contains {len(context['results'])} results.")
 
-    # ---------------------------------------------------------
-    # Step 3: Generate Answer
-    # ---------------------------------------------------------
+    print(f"\n[3] Generating answer with {provider}...")
 
-    print("\n[3] Analyzing code...")
-
-    generator = AnswerGenerator()
+    generator = LLMAnswerGenerator(provider)
 
     answer = generator.generate(
         query,
         context,
     )
-
-    # ---------------------------------------------------------
-    # Step 4: Display Answer
-    # ---------------------------------------------------------
 
     print("\n" + "=" * 70)
     print("CODEBASEBRAIN ANSWER")
@@ -73,7 +59,12 @@ def main():
         print("Please enter a question.")
         return
 
-    run_pipeline(query)
+    provider = "mock"
+
+    if len(sys.argv) > 1:
+        provider = sys.argv[1]
+
+    run_pipeline(query, provider)
 
 
 if __name__ == "__main__":
