@@ -284,17 +284,83 @@ class AnswerGenerator:
         results,
     ):
         """
-        Select the highest-ranked result from HybridRetriever.
+        Select the most useful implementation from the retrieved results.
 
-        HybridRetriever is responsible for relevance ranking.
-        The AnswerGenerator must not introduce a second ranking
-        mechanism based on AST complexity or arbitrary bonuses.
+        HybridRetriever determines retrieval relevance. This method only
+        resolves an important code-intelligence ambiguity: an abstract
+        interface method should not be presented as the concrete
+        implementation when a concrete implementation of the same method
+        was also retrieved.
+
+        Preference order:
+        1. A concrete implementation explicitly targeted by the graph.
+        2. A concrete implementation of the same method.
+        3. The original top-ranked result.
+
+        This is not a general-purpose re-ranker. It is an implementation
+        resolution step used to distinguish contracts from implementations.
         """
 
         if not results:
             return {}
 
-        return results[0]
+        primary = results[0]
+        primary_name = primary.get("qualified_name", "")
+        primary_method = primary_name.split(".")[-1] if primary_name else ""
+
+        # If the top result is already concrete, preserve HybridRetriever's
+        # ranking exactly.
+        if not self._is_not_implemented(primary.get("code", "")):
+            return primary
+
+        # The top result is an abstract contract. Look for an explicit
+        # graph-linked implementation first.
+        graph_targets = []
+        for relationship in primary.get("graph_relationships", []):
+            if not isinstance(relationship, dict):
+                continue
+
+            rel_type = str(
+                relationship.get("type", "")
+            ).upper()
+
+            if rel_type != "INHERITS_METHOD":
+                continue
+
+            source = relationship.get("source", "")
+            target = relationship.get("target", "")
+
+            if source == primary_name and target:
+                graph_targets.append(target)
+
+        for target in graph_targets:
+            for result in results:
+                if result.get("qualified_name") != target:
+                    continue
+
+                if not self._is_not_implemented(
+                    result.get("code", "")
+                ):
+                    return result
+
+        # Fall back to a concrete implementation of the same method.
+        if primary_method:
+            for result in results[1:]:
+                name = result.get("qualified_name", "")
+                if not name:
+                    continue
+
+                if name.split(".")[-1] != primary_method:
+                    continue
+
+                if not self._is_not_implemented(
+                    result.get("code", "")
+                ):
+                    return result
+
+        # If no concrete implementation was retrieved, keep the original
+        # result and let the answer explicitly describe it as a contract.
+        return primary
 
     # ================================================================
     # Implementation path
@@ -447,6 +513,17 @@ class AnswerGenerator:
                     "matched endpoint's view function."
                 )
 
+        if (
+            "provide_automatic_options" in source_text
+            and "req.method" in source_text
+            and '"OPTIONS"' in source_text
+            and "make_default_options_response" in source_text
+        ):
+            operations.append(
+                "For an OPTIONS request with automatic OPTIONS "
+                "support enabled, it returns the default OPTIONS response."
+            )
+
         # ============================================================
         # URL RULE REGISTRATION
         # ============================================================
@@ -549,6 +626,15 @@ class AnswerGenerator:
             operations.append(
                 "It associates the endpoint with "
                 "the view function."
+            )
+
+        if (
+            "self.record" in source_text
+            and "s.add_url_rule" in source_text
+        ):
+            operations.append(
+                "For a blueprint, it records the URL-rule registration "
+                "so the rule can later be applied to the application."
             )
 
         # ============================================================
@@ -694,36 +780,44 @@ class AnswerGenerator:
         # RETURN BEHAVIOR
         # ============================================================
 
-        return_descriptions = []
+        # Only add generic return descriptions when the method has not
+        # already been recognized as a higher-level operation. This avoids
+        # misleading statements such as saying every dispatch method
+        # "returns the result of make_default_options_response()" when that
+        # is only an OPTIONS-specific branch.
+        recognized_high_level_behavior = bool(operations)
 
-        for node in ast.walk(tree):
+        if not recognized_high_level_behavior:
+            return_descriptions = []
 
-            if not isinstance(
-                node,
-                ast.Return,
-            ):
-                continue
+            for node in ast.walk(tree):
 
-            description = (
-                self._describe_return_expression(
-                    node.value
+                if not isinstance(
+                    node,
+                    ast.Return,
+                ):
+                    continue
+
+                description = (
+                    self._describe_return_expression(
+                        node.value
+                    )
                 )
-            )
 
-            if description:
-                return_descriptions.append(
-                    description
+                if description:
+                    return_descriptions.append(
+                        description
+                    )
+
+            for description in return_descriptions:
+                sentence = (
+                    f"It returns {description}."
                 )
 
-        for description in return_descriptions:
-            sentence = (
-                f"It returns {description}."
-            )
-
-            if sentence not in operations:
-                operations.append(
-                    sentence
-                )
+                if sentence not in operations:
+                    operations.append(
+                        sentence
+                    )
 
         # ============================================================
         # ABSTRACT CONTRACT
@@ -735,28 +829,6 @@ class AnswerGenerator:
             operations.append(
                 "It defines an abstract contract and "
                 "raises `NotImplementedError`."
-            )
-
-        # ============================================================
-        # BRANCH COUNT
-        # ============================================================
-
-        branch_count = sum(
-            isinstance(
-                node,
-                (
-                    ast.If,
-                    ast.IfExp,
-                    ast.Match,
-                ),
-            )
-            for node in ast.walk(tree)
-        )
-
-        if branch_count:
-            operations.append(
-                f"The implementation evaluates "
-                f"{branch_count} conditional branches."
             )
 
         return self._deduplicate(
