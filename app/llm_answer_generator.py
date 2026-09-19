@@ -11,72 +11,76 @@ class LLMAnswerGenerator:
 
     def generate(self, query, context):
         prompt = self._build_prompt(query, context)
+
         return self.provider.generate(prompt)
 
     def _build_prompt(self, query, context):
-        sections = []
+        sections = [
+            "You are CodebaseBrain, an AI assistant for understanding "
+            "software repositories.",
+            "",
+            "Answer the user's question using ONLY the repository evidence.",
+            "Do not invent code, functions, files, or relationships.",
+            "Give a concise technical answer.",
+            "Explain the implementation path when multiple functions are involved.",
+            "Use actual function names and file paths.",
+            "",
+            f"USER QUESTION:",
+            query,
+            "",
+            "REPOSITORY EVIDENCE:",
+        ]
 
-        sections.append(
-            "You are CodebaseBrain, an AI assistant that explains software repositories."
-        )
+        results = context.get("results", [])
 
-        sections.append(
-            "Answer the user's question using ONLY the repository context provided below."
-        )
+        # Only send the most relevant 3 results to the local model.
+        for index, result in enumerate(results[:3], start=1):
 
-        sections.append(
-            "Do not invent functions, files, behavior, or relationships that are not "
-            "supported by the context."
-        )
-
-        sections.append(
-            "When useful, mention the relevant file paths, function/class names, "
-            "implementation flow, and code relationships."
-        )
-
-        sections.append(
-            f"\nUSER QUESTION:\n{query}"
-        )
-
-        sections.append("\nREPOSITORY CONTEXT:")
-
-        for index, result in enumerate(context.get("results", []), start=1):
             sections.append(
-                f"\n--- RESULT {index} ---\n"
-                f"Qualified name: {result.get('qualified_name', '')}\n"
-                f"Type: {result.get('type', '')}\n"
-                f"File: {result.get('file', '')}\n"
-                f"Line: {result.get('line', '')}\n"
-                f"Final score: {result.get('final_score', '')}\n"
+                f"""
+--- RESULT {index} ---
+
+Qualified name: {result.get("qualified_name", "")}
+File: {result.get("file", "")}
+Line: {result.get("line", "")}
+"""
             )
-
-            explanation = result.get("explanation")
-
-            if explanation:
-                sections.append(
-                    "Retrieval explanation:\n"
-                    + "\n".join(f"- {item}" for item in explanation)
-                )
 
             relationships = result.get("graph_relationships", [])
 
             if relationships:
                 sections.append(
-                    "Code graph relationships:\n"
-                    + "\n".join(f"- {item}" for item in relationships)
+                    "Relationships:\n"
+                    + "\n".join(
+                        f"- {item}"
+                        for item in relationships
+                    )
                 )
 
             code = result.get("code", "")
 
             if code:
+                # Limit each code component sent to the local model.
+                code_lines = code.splitlines()
+
+                if len(code_lines) > 60:
+                    code_lines = code_lines[:60]
+
                 sections.append(
-                    f"Source code:\n```python\n{code}\n```"
+                    "Source code:\n```python\n"
+                    + "\n".join(code_lines)
+                    + "\n```"
                 )
 
-        sections.append(
-            "\nProvide a concise but technically useful answer. "
-            "Explain the implementation path when multiple related components "
-            "are involved."
+        sections.extend(
+            [
+                "",
+                "ANSWER:",
+                "Start with the direct answer.",
+                "Then explain the implementation flow.",
+                "Mention important classes, functions, and files.",
+                "Keep the answer concise.",
+            ]
         )
 
         return "\n".join(sections)

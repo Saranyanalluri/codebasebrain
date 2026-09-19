@@ -17,10 +17,12 @@ def run_pipeline(query, provider="mock"):
     results = retriever.search(
         query,
         top_k=5,
-        candidate_k=20,
+        candidate_k=20
     )
 
-    print(f"Retrieved {len(results)} relevant code components.")
+    print(
+        f"Retrieved {len(results)} relevant code components."
+    )
 
     print("\n[2] Building code context...")
 
@@ -29,18 +31,22 @@ def run_pipeline(query, provider="mock"):
     context = context_builder.build(
         query,
         results,
-        max_results=5,
+        max_results=5
     )
 
-    print(f"Context contains {len(context['results'])} results.")
+    print(
+        f"Context contains {len(context['results'])} results."
+    )
 
-    print(f"\n[3] Generating answer with {provider}...")
+    print(
+        f"\n[3] Generating answer with {provider}..."
+    )
 
     generator = LLMAnswerGenerator(provider)
 
     answer = generator.generate(
         query,
-        context,
+        context
     )
 
     print("\n" + "=" * 70)
@@ -53,18 +59,33 @@ def run_pipeline(query, provider="mock"):
 
 
 def main():
-    query = input("\nAsk a question about the repository: ").strip()
+
+    query = input(
+        "\nAsk a question about the repository: "
+    ).strip()
 
     if not query:
         print("Please enter a question.")
         return
 
-    provider = "mock"
+    # Default provider is now local.
+    provider = "local"
+
+    # Optional command-line provider.
+    #
+    # Examples:
+    # python -m app.main local
+    # python -m app.main mock
+    # python -m app.main claude
+    # python -m app.main openai
 
     if len(sys.argv) > 1:
         provider = sys.argv[1]
 
-    run_pipeline(query, provider)
+    run_pipeline(
+        query,
+        provider
+    )
 
 
 if __name__ == "__main__":
