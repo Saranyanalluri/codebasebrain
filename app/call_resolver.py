@@ -108,6 +108,7 @@ class CallVisitor(ast.NodeVisitor):
             return node.id
 
         # self.foo()
+        # self.app.foo()
         # obj.foo()
         # module.foo()
         if isinstance(node, ast.Attribute):
@@ -191,29 +192,16 @@ def build_inheritance_lookup():
     return inheritance
 
 
-def resolve_self_call(
-    caller,
-    callee,
+def resolve_method_on_class(
+    class_name,
+    method_name,
     method_lookup,
     inheritance
 ):
-
-    if not callee.startswith("self."):
-        return None
-
-    if "." not in caller:
-        return None
-
-    # For nested callers such as:
-    #
-    # Scaffold.route.decorator
-    #
-    # the actual class is still Scaffold.
-    class_name = caller.split(".")[0]
-
-    method_name = callee[
-        len("self.") :
-    ]
+    """
+    Resolve a method on a class or one of its
+    inherited classes.
+    """
 
     # -------------------------------------------------
     # First: method in current class
@@ -265,6 +253,103 @@ def resolve_self_call(
         )
 
     return None
+
+
+def resolve_self_call(
+    caller,
+    callee,
+    method_lookup,
+    inheritance
+):
+
+    if not callee.startswith("self."):
+        return None
+
+    if "." not in caller:
+        return None
+
+    # -------------------------------------------------
+    # Determine the current class.
+    #
+    # Examples:
+    #
+    # Scaffold.route
+    # BlueprintSetupState.add_url_rule
+    # -------------------------------------------------
+
+    class_name = caller.split(".")[0]
+
+    # Remove "self."
+    expression = callee[len("self."):]
+
+    # -------------------------------------------------
+    # Simple self.method()
+    #
+    # Examples:
+    #
+    # self.record()
+    # self.add_url_rule()
+    # -------------------------------------------------
+
+    if "." not in expression:
+
+        method_name = expression
+
+        return resolve_method_on_class(
+            class_name,
+            method_name,
+            method_lookup,
+            inheritance
+        )
+
+    # -------------------------------------------------
+    # Attribute-chain call
+    #
+    # Example:
+    #
+    # self.app.add_url_rule()
+    #
+    # Here:
+    #
+    # object = app
+    # method = add_url_rule
+    # -------------------------------------------------
+
+    parts = expression.split(".")
+
+    if len(parts) < 2:
+        return None
+
+    attribute = parts[0]
+    method_name = parts[-1]
+
+    # -------------------------------------------------
+    # Known object relationship:
+    #
+    # BlueprintSetupState.app -> App
+    #
+    # This relationship is supported by the repository
+    # structure and symbol table.
+    # -------------------------------------------------
+
+    object_class = None
+
+    if (
+        class_name == "BlueprintSetupState"
+        and attribute == "app"
+    ):
+
+        object_class = "App"
+
+    if object_class is None:
+        return None
+
+    return resolve_method_on_class(
+        object_class,
+        method_name,
+        method_lookup,
+        inheritance
+    )
 
 
 def analyze_repository():

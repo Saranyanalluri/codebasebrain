@@ -21,7 +21,7 @@ class LocalProvider(LLMProvider):
 
         payload = {
             "prompt": prompt,
-            "n_predict": 300,
+            "n_predict": 180,
             "temperature": 0.2,
             "stream": False,
         }

@@ -552,6 +552,12 @@
     "line": 876
   },
   {
+    "source": "BlueprintSetupState.add_url_rule",
+    "target": "App.add_url_rule",
+    "type": "CALLS",
+    "line": 110
+  },
+  {
     "source": "Blueprint.record_once",
     "target": "Blueprint.record",
     "type": "CALLS",
