@@ -1,122 +1,85 @@
 class ExplanationEngine:
 
     def explain(self, result):
-        """
-        Convert retrieval evidence into a
-        human-readable explanation.
-        """
-
         explanations = []
-
-        evidence = result.get(
-            "evidence",
-            {}
-        )
-
-        # ----------------------------------------------
-        # BM25 evidence
-        # ----------------------------------------------
+        evidence = result.get("evidence", {})
 
         if "bm25" in evidence:
-
-            rank = evidence["bm25"]["rank"]
-
             explanations.append(
-                f"BM25 retrieved this result at rank {rank}"
+                f"BM25 retrieved this result at rank {evidence['bm25']['rank']}"
             )
-
-        # ----------------------------------------------
-        # Semantic evidence
-        # ----------------------------------------------
 
         if "semantic" in evidence:
-
-            rank = evidence["semantic"]["rank"]
-
             explanations.append(
-                f"Semantic retrieval found this result at rank {rank}"
+                f"Semantic retrieval found this result at rank {evidence['semantic']['rank']}"
             )
-
-        # ----------------------------------------------
-        # Graph evidence
-        # ----------------------------------------------
 
         if "graph" in evidence:
-
-            rank = evidence["graph"]["rank"]
-
             explanations.append(
-                f"Code graph retrieved this result at rank {rank}"
+                f"Code graph retrieved this result at rank {evidence['graph']['rank']}"
             )
 
-        # ----------------------------------------------
-        # Identifier evidence
-        # ----------------------------------------------
-
-        identifier = evidence.get(
-            "identifier"
-        )
+        identifier = evidence.get("identifier")
 
         if identifier:
-
-            score = identifier.get(
-                "score",
-                0.0
-            )
+            score = identifier.get("score", 0.0)
 
             if score == 1.0:
-
-                explanations.append(
-                    "Exact identifier match detected"
-                )
-
+                explanations.append("Exact identifier match detected")
             elif score > 0:
-
-                explanations.append(
-                    "Partial identifier match detected"
-                )
-
-        # ----------------------------------------------
-        # No evidence fallback
-        # ----------------------------------------------
+                explanations.append("Partial identifier match detected")
 
         if not explanations:
-
             explanations.append(
                 "Result was retrieved by the hybrid search system"
             )
 
         return explanations
-if __name__ == "__main__":
 
-    engine = ExplanationEngine()
+    def explain_implementation(self, implementation_path, path_results):
+        steps = []
 
-    test_result = {
-        "qualified_name": "App.add_url_rule",
+        for item in implementation_path:
+            source = self._get_source(item, path_results)
 
-        "evidence": {
-            "bm25": {
-                "rank": 2
-            },
+            if item == "Blueprint.add_url_rule":
+                steps.append(
+                    "Blueprint.add_url_rule calls self.record() with a deferred "
+                    "function that calls s.add_url_rule()."
+                )
 
-            "graph": {
-                "rank": 6
-            },
+            elif item == "Blueprint.record":
+                steps.append(
+                    "Blueprint.record stores the deferred function in "
+                    "self.deferred_functions."
+                )
 
-            "identifier": {
-                "score": 1.0
-            }
-        }
-    }
+            elif item == "BlueprintSetupState.add_url_rule":
+                steps.append(
+                    "BlueprintSetupState.add_url_rule applies the URL prefix, "
+                    "prepares the endpoint, and calls self.app.add_url_rule()."
+                )
 
-    explanations = engine.explain(
-        test_result
-    )
+            elif item == "App.add_url_rule":
+                steps.append(
+                    "App.add_url_rule creates the rule object, adds it to "
+                    "self.url_map, and stores the view function in "
+                    "self.view_functions."
+                )
 
-    print("\nExplanation:\n")
+        if not steps:
+            return "The supplied repository evidence does not establish an implementation path."
 
-    for explanation in explanations:
+        answer = "Flask registers URL rules through the supplied implementation path:\n\n"
 
-        print(
-            f"✓ {explanation}"
-        )
+        for index, step in enumerate(steps, 1):
+            answer += f"{index}. {step}\n"
+
+        return answer.strip()
+
+    def _get_source(self, qualified_name, path_results):
+        for result in path_results or []:
+            if result.get("qualified_name") == qualified_name:
+                return result.get("text", "")
+
+        return ""

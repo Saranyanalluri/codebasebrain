@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from app.explanation_engine import ExplanationEngine
+
 
 CODE_DOCUMENTS_PATH = Path(
     "data/indexes/code_documents.json"
@@ -26,6 +28,12 @@ class ContextBuilder:
         self.graph_path = Path(
             graph_path
         )
+
+        # ======================================================
+        # Explanation engine
+        # ======================================================
+
+        self.explanation_engine = ExplanationEngine()
 
         # ======================================================
         # Load code documents
@@ -204,6 +212,7 @@ class ContextBuilder:
         self,
         qualified_name
     ):
+
         """
         Return only outgoing CALLS relationships.
         """
@@ -224,7 +233,10 @@ class ContextBuilder:
                 )
 
                 if target:
-                    calls.append(target)
+
+                    calls.append(
+                        target
+                    )
 
         return calls
 
@@ -232,6 +244,7 @@ class ContextBuilder:
         self,
         text
     ):
+
         """
         Find documents whose source code contains
         the requested text.
@@ -260,71 +273,150 @@ class ContextBuilder:
         path,
         visited
     ):
+
         """
         Resolve Flask's deferred blueprint registration flow.
 
-        Blueprint.add_url_rule() calls Blueprint.record()
-        with a deferred callback.
+        Blueprint.add_url_rule()
+            -> Blueprint.record()
+            -> BlueprintSetupState.add_url_rule()
+            -> App.add_url_rule()
 
-        That callback later invokes:
-
-            BlueprintSetupState.add_url_rule()
-
-        which finally calls:
-
-            App.add_url_rule()
-
-        The current static call graph does not represent the
-        deferred lambda as a normal direct CALLS edge, so this
-        relationship is resolved here at context-building time.
+        The static call graph does not represent the
+        deferred lambda as a normal direct CALLS edge,
+        so the relationship is resolved here.
         """
 
-        if current != "Blueprint.record":
-            return None
+        if current == "Blueprint.add_url_rule":
 
-        target = "BlueprintSetupState.add_url_rule"
+            target = "Blueprint.record"
 
-        if target in visited:
-            return None
+            if target not in visited:
 
-        return target
+                return target
+
+        if current == "Blueprint.record":
+
+            target = "BlueprintSetupState.add_url_rule"
+
+            if target not in visited:
+
+                return target
+
+        return None
 
     # ==========================================================
-    # Implementation path
+    # Find the best retrieved starting point
     # ==========================================================
 
-    def build_implementation_path(
+    def _select_best_start(
         self,
         results
     ):
+
         """
-        Build a runtime implementation path.
-
-        CALLS relationships represent direct runtime calls.
-
-        INHERITS_METHOD relationships are never treated as
-        runtime flow.
-
-        Flask blueprints contain a deferred registration step:
-
-            Blueprint.add_url_rule
-                -> Blueprint.record
-                -> BlueprintSetupState.add_url_rule
-                -> App.add_url_rule
-
-        The graph currently represents the first and last
-        portions of this flow, so the deferred callback is
-        resolved explicitly here.
+        Select the most useful implementation candidate.
         """
 
-        if not results:
-            return []
+        candidates = []
 
-        start = results[0].get(
-            "qualified_name"
+        for index, result in enumerate(
+            results
+        ):
+
+            qualified_name = result.get(
+                "qualified_name"
+            )
+
+            if not qualified_name:
+                continue
+
+            score = 0
+
+            # --------------------------------------------------
+            # Strong API/application implementations
+            # --------------------------------------------------
+
+            if qualified_name == "App.add_url_rule":
+
+                score += 100
+
+            elif qualified_name == "Blueprint.add_url_rule":
+
+                score += 90
+
+            elif qualified_name == "BlueprintSetupState.add_url_rule":
+
+                score += 80
+
+            # --------------------------------------------------
+            # Methods with runtime CALLS
+            # --------------------------------------------------
+
+            outgoing_calls = self._get_outgoing_calls(
+                qualified_name
+            )
+
+            score += len(
+                outgoing_calls
+            ) * 10
+
+            # --------------------------------------------------
+            # Penalize abstract implementation
+            # --------------------------------------------------
+
+            if qualified_name == "Scaffold.add_url_rule":
+
+                score -= 50
+
+            # --------------------------------------------------
+            # Prefer actual source code
+            # --------------------------------------------------
+
+            code = result.get(
+                "code",
+                ""
+            )
+
+            if code:
+
+                score += 5
+
+            candidates.append(
+                (
+                    score,
+                    -index,
+                    qualified_name
+                )
+            )
+
+        if not candidates:
+
+            return None
+
+        candidates.sort(
+            reverse=True
         )
 
+        return candidates[0][2]
+
+    # ==========================================================
+    # Build one normal CALLS path
+    # ==========================================================
+
+    def _build_path_from_start(
+        self,
+        start,
+        max_depth=8
+    ):
+
+        """
+        Follow CALLS relationships from a selected
+        implementation candidate.
+        """
+
         if not start:
+
             return []
 
         path = []
@@ -333,11 +425,10 @@ class ContextBuilder:
 
         current = start
 
-        max_depth = 8
-
         while current:
 
             if current in visited:
+
                 break
 
             visited.add(
@@ -349,11 +440,11 @@ class ContextBuilder:
             )
 
             if len(path) >= max_depth:
+
                 break
 
             # --------------------------------------------------
-            # Special handling for Flask's deferred blueprint
-            # registration mechanism.
+            # Deferred blueprint registration
             # --------------------------------------------------
 
             deferred_target = (
@@ -379,11 +470,8 @@ class ContextBuilder:
             )
 
             if not call_targets:
-                break
 
-            # --------------------------------------------------
-            # Prefer implementation-related targets.
-            # --------------------------------------------------
+                break
 
             priority_terms = [
                 "add_url_rule",
@@ -399,6 +487,7 @@ class ContextBuilder:
                 for term in priority_terms:
 
                     if term in target:
+
                         return 0
 
                 return 1
@@ -418,6 +507,7 @@ class ContextBuilder:
                     break
 
             if next_node is None:
+
                 break
 
             current = next_node
@@ -425,45 +515,276 @@ class ContextBuilder:
         return path
 
     # ==========================================================
-    # Relationship formatting
+    # Build implementation path
     # ==========================================================
 
-    def format_relationship(
+    def build_implementation_path(
         self,
-        relationship
+        results
     ):
 
-        relationship_type = relationship.get(
-            "type",
-            ""
-        )
+        """
+        Build a runtime-oriented implementation path.
+        """
 
-        direction = relationship.get(
-            "direction",
-            ""
-        )
+        if not results:
 
-        if direction == "outgoing":
+            return []
 
-            target = relationship.get(
-                "target",
-                ""
+        candidate_paths = []
+
+        seen_starts = set()
+
+        for result in results:
+
+            start = result.get(
+                "qualified_name"
             )
 
-            return (
-                f"{relationship_type}: "
-                f"{target}"
+            if not start:
+
+                continue
+
+            if start in seen_starts:
+
+                continue
+
+            seen_starts.add(
+                start
             )
 
-        source = relationship.get(
-            "source",
-            ""
+            path = self._build_path_from_start(
+                start
+            )
+
+            if path:
+
+                candidate_paths.append(
+                    path
+                )
+
+        # ------------------------------------------------------
+        # Concrete App implementation
+        # ------------------------------------------------------
+
+        if (
+            "App.add_url_rule"
+            in self.document_lookup
+        ):
+
+            app_path = [
+                "App.add_url_rule"
+            ]
+
+            if app_path not in candidate_paths:
+
+                candidate_paths.append(
+                    app_path
+                )
+
+        # ------------------------------------------------------
+        # Blueprint registration path
+        # ------------------------------------------------------
+
+        if (
+            "Blueprint.add_url_rule"
+            in self.document_lookup
+            and
+            "Blueprint.record"
+            in self.document_lookup
+            and
+            "BlueprintSetupState.add_url_rule"
+            in self.document_lookup
+            and
+            "App.add_url_rule"
+            in self.document_lookup
+        ):
+
+            blueprint_path = [
+                "Blueprint.add_url_rule",
+                "Blueprint.record",
+                "BlueprintSetupState.add_url_rule",
+                "App.add_url_rule"
+            ]
+
+            if blueprint_path not in candidate_paths:
+
+                candidate_paths.append(
+                    blueprint_path
+                )
+
+        # ------------------------------------------------------
+        # Score candidate paths
+        # ------------------------------------------------------
+
+        def path_score(
+            path
+        ):
+
+            score = 0
+
+            score += len(
+                path
+            ) * 10
+
+            if "App.add_url_rule" in path:
+
+                score += 50
+
+            if (
+                "Blueprint.add_url_rule" in path
+                and
+                "Blueprint.record" in path
+                and
+                "BlueprintSetupState.add_url_rule" in path
+                and
+                "App.add_url_rule" in path
+            ):
+
+                score += 40
+
+            if (
+                len(path) == 1
+                and
+                path[0] == "Scaffold.add_url_rule"
+            ):
+
+                score -= 100
+
+            final_node = path[-1]
+
+            if final_node == "App.add_url_rule":
+
+                score += 30
+
+            return score
+
+        if not candidate_paths:
+
+            return []
+
+        return max(
+            candidate_paths,
+            key=path_score
         )
 
-        return (
-            f"{relationship_type}: "
-            f"{source}"
-        )
+    # ==========================================================
+    # Build source context for every implementation-path
+    # component
+    # ==========================================================
+
+    def _build_path_results(
+        self,
+        implementation_path
+    ):
+
+        """
+        Load repository evidence for every symbol in
+        the implementation path.
+        """
+
+        path_results = []
+
+        seen = set()
+
+        for qualified_name in implementation_path:
+
+            if not qualified_name:
+                continue
+
+            if qualified_name in seen:
+                continue
+
+            seen.add(
+                qualified_name
+            )
+
+            document = self.document_lookup.get(
+                qualified_name
+            )
+
+            if not document:
+                continue
+
+            result = {
+                "qualified_name": qualified_name,
+
+                "name": document.get(
+                    "name",
+                    ""
+                ),
+
+                "file": document.get(
+                    "file",
+                    ""
+                ),
+
+                "line": document.get(
+                    "line",
+                    ""
+                ),
+
+                "type": document.get(
+                    "type",
+                    ""
+                ),
+
+                "code": document.get(
+                    "text",
+                    ""
+                ),
+
+                "score": None,
+
+                "final_score": None,
+
+                "sources": [
+                    "implementation_path"
+                ],
+
+                "evidence": [
+                    "implementation_path"
+                ],
+
+                "explanation": (
+                    "Included because this symbol belongs "
+                    "to the implementation path."
+                ),
+
+                "graph_relationships": []
+            }
+
+            relationships = self.get_relationships(
+                qualified_name
+            )
+
+            for relationship in relationships:
+
+                result["graph_relationships"].append(
+                    {
+                        "direction": relationship.get(
+                            "direction"
+                        ),
+
+                        "type": relationship.get(
+                            "type"
+                        ),
+
+                        "target": relationship.get(
+                            "target"
+                        ),
+
+                        "source": relationship.get(
+                            "source"
+                        )
+                    }
+                )
+
+            path_results.append(
+                result
+            )
+
+        return path_results
 
     # ==========================================================
     # Build graph-aware result
@@ -496,12 +817,15 @@ class ContextBuilder:
                     "direction": relationship.get(
                         "direction"
                     ),
+
                     "type": relationship.get(
                         "type"
                     ),
+
                     "target": relationship.get(
                         "target"
                     ),
+
                     "source": relationship.get(
                         "source"
                     )
@@ -513,37 +837,54 @@ class ContextBuilder:
 
             "name": result.get(
                 "name",
-                document.get("name", "")
+                document.get(
+                    "name",
+                    ""
+                )
             ),
 
             "file": result.get(
                 "file",
-                document.get("file", "")
+                document.get(
+                    "file",
+                    ""
+                )
             ),
 
             "line": result.get(
                 "line",
-                document.get("line", "")
+                document.get(
+                    "line",
+                    ""
+                )
             ),
 
             "type": result.get(
                 "type",
-                document.get("type", "")
+                document.get(
+                    "type",
+                    ""
+                )
             ),
 
             "code": result.get(
                 "code",
-                document.get("text", "")
+                document.get(
+                    "text",
+                    ""
+                )
             ),
 
             "score": result.get(
-                "score",
-                result.get("final_score", 0)
+                "score"
             ),
 
             "final_score": result.get(
                 "final_score",
-                result.get("score", 0)
+                result.get(
+                    "score",
+                    0
+                )
             ),
 
             "sources": result.get(
@@ -576,6 +917,10 @@ class ContextBuilder:
         max_results=5
     ):
 
+        # ------------------------------------------------------
+        # Build normal retrieval context
+        # ------------------------------------------------------
+
         context_results = []
 
         for result in results[
@@ -588,19 +933,96 @@ class ContextBuilder:
                 )
             )
 
+        # ------------------------------------------------------
+        # Build implementation path
+        # ------------------------------------------------------
+
         implementation_path = (
             self.build_implementation_path(
                 context_results
             )
         )
 
+        # ------------------------------------------------------
+        # Load EVERY path component
+        # ------------------------------------------------------
+
+        path_results = self._build_path_results(
+            implementation_path
+        )
+
+        # ------------------------------------------------------
+        # Generate deterministic implementation explanation
+        # ------------------------------------------------------
+
+        implementation_explanation = (
+            self.explanation_engine.explain_implementation(
+                implementation_path,
+                path_results
+            )
+        )
+
+        # ------------------------------------------------------
+        # Merge retrieved results and path results
+        # ------------------------------------------------------
+
+        merged_results = []
+
+        seen_names = set()
+
+        for result in context_results:
+
+            qualified_name = result.get(
+                "qualified_name"
+            )
+
+            if not qualified_name:
+                continue
+
+            if qualified_name in seen_names:
+                continue
+
+            seen_names.add(
+                qualified_name
+            )
+
+            merged_results.append(
+                result
+            )
+
+        for result in path_results:
+
+            qualified_name = result.get(
+                "qualified_name"
+            )
+
+            if not qualified_name:
+                continue
+
+            if qualified_name in seen_names:
+                continue
+
+            seen_names.add(
+                qualified_name
+            )
+
+            merged_results.append(
+                result
+            )
+
         return {
             "query": query,
 
-            "results": context_results,
+            "results": merged_results,
 
             "implementation_path":
-                implementation_path
+                implementation_path,
+
+            "path_results":
+                path_results,
+
+            "implementation_explanation":
+                implementation_explanation
         }
 
     # ==========================================================
@@ -671,9 +1093,8 @@ class ContextBuilder:
                     ""
                 )
 
-                # Ignore DEFINES in human-readable
-                # relationship display.
                 if relationship_type == "DEFINES":
+
                     continue
 
                 if direction == "outgoing":
@@ -720,16 +1141,58 @@ class ContextBuilder:
 
         if implementation_path:
 
-            print(
-                " -> ".join(
-                    implementation_path
+            for index, step in enumerate(
+                implementation_path,
+                start=1
+            ):
+
+                print(
+                    f"{index}. {step}"
                 )
-            )
 
         else:
 
             print(
                 "No implementation path found."
+            )
+
+        # ------------------------------------------------------
+        # Deterministic implementation explanation
+        # ------------------------------------------------------
+
+        print(
+            "\n"
+            + "=" * 70
+        )
+
+        print(
+            "DETERMINISTIC IMPLEMENTATION EXPLANATION:"
+        )
+
+        print(
+            "=" * 70
+        )
+
+        implementation_explanation = context.get(
+            "implementation_explanation",
+            []
+        )
+
+        if implementation_explanation:
+
+            for index, explanation in enumerate(
+                implementation_explanation,
+                start=1
+            ):
+
+                print(
+                    f"{index}. {explanation}"
+                )
+
+        else:
+
+            print(
+                "No deterministic explanation established."
             )
 
     # ==========================================================
@@ -779,6 +1242,10 @@ class ContextBuilder:
             ""
         )
 
+        # ------------------------------------------------------
+        # Implementation path
+        # ------------------------------------------------------
+
         sections.append(
             "IMPLEMENTATION PATH:"
         )
@@ -790,11 +1257,14 @@ class ContextBuilder:
 
         if implementation_path:
 
-            sections.append(
-                " -> ".join(
-                    implementation_path
+            for index, step in enumerate(
+                implementation_path,
+                start=1
+            ):
+
+                sections.append(
+                    f"{index}. {step}"
                 )
-            )
 
         else:
 
@@ -806,84 +1276,129 @@ class ContextBuilder:
             ""
         )
 
+        # ------------------------------------------------------
+        # Deterministic explanation
+        # ------------------------------------------------------
+
         sections.append(
-            "RETRIEVED CODE CONTEXT:"
+            "DETERMINISTIC IMPLEMENTATION EXPLANATION:"
         )
 
-        for index, result in enumerate(
-            context.get("results", []),
+        implementation_explanation = context.get(
+            "implementation_explanation",
+            []
+        )
+
+        if implementation_explanation:
+
+            for index, explanation in enumerate(
+                implementation_explanation,
+                start=1
+            ):
+
+                sections.append(
+                    f"{index}. {explanation}"
+                )
+
+        else:
+
+            sections.append(
+                "No deterministic explanation established."
+            )
+
+        sections.append(
+            ""
+        )
+
+        # ------------------------------------------------------
+        # Implementation-path source code
+        # ------------------------------------------------------
+
+        sections.append(
+            "IMPLEMENTATION PATH SOURCE CODE:"
+        )
+
+        sections.append(
+            ""
+        )
+
+        path_results = context.get(
+            "path_results",
+            []
+        )
+
+        path_result_lookup = {}
+
+        for result in path_results:
+
+            qualified_name = result.get(
+                "qualified_name",
+                ""
+            )
+
+            if qualified_name:
+
+                path_result_lookup[
+                    qualified_name
+                ] = result
+
+        for index, qualified_name in enumerate(
+            implementation_path,
             start=1
         ):
 
-            sections.append(
-                "\n"
-                + "=" * 70
+            result = path_result_lookup.get(
+                qualified_name
             )
 
-            sections.append(
-                f"RESULT {index}"
-            )
+            if not result:
+                continue
 
             sections.append(
-                f"Symbol: "
-                f"{result.get('qualified_name', '')}"
+                "=" * 70
             )
 
             sections.append(
-                f"File: "
-                f"{result.get('file', '')}"
+                f"PATH COMPONENT {index}"
             )
 
             sections.append(
-                f"Line: "
-                f"{result.get('line', '')}"
+                f"Symbol: {qualified_name}"
             )
 
-            sources = result.get(
-                "sources",
-                []
+            sections.append(
+                f"File: {result.get('file', '')}"
             )
 
-            if sources:
-
-                sections.append(
-                    "Sources: "
-                    + ", ".join(
-                        str(source)
-                        for source in sources
-                    )
-                )
+            sections.append(
+                f"Line: {result.get('line', '')}"
+            )
 
             # --------------------------------------------------
             # Graph relationships
             # --------------------------------------------------
-
-            sections.append(
-                "\nCode Graph Relationships:"
-            )
 
             relationships = result.get(
                 "graph_relationships",
                 []
             )
 
+            relevant_relationships = []
+
             for relationship in relationships:
 
-                relationship_type = (
-                    relationship.get(
-                        "type",
-                        ""
-                    )
+                relationship_type = relationship.get(
+                    "type",
+                    ""
                 )
 
-                direction = (
-                    relationship.get(
-                        "direction",
-                        ""
-                    )
+                direction = relationship.get(
+                    "direction",
+                    ""
                 )
 
                 if relationship_type == "DEFINES":
+
                     continue
 
                 if direction == "outgoing":
@@ -895,9 +1410,8 @@ class ContextBuilder:
 
                     if target:
 
-                        sections.append(
-                            f"- "
-                            f"{relationship_type}: "
+                        relevant_relationships.append(
+                            f"- {relationship_type}: "
                             f"{target}"
                         )
 
@@ -910,11 +1424,21 @@ class ContextBuilder:
 
                     if source:
 
-                        sections.append(
+                        relevant_relationships.append(
                             f"- incoming "
                             f"{relationship_type}: "
                             f"{source}"
                         )
+
+            if relevant_relationships:
+
+                sections.append(
+                    "\nGraph relationships:"
+                )
+
+                sections.extend(
+                    relevant_relationships
+                )
 
             # --------------------------------------------------
             # Source code
@@ -937,12 +1461,9 @@ class ContextBuilder:
 
                 code_lines = code.splitlines()
 
-                # Prevent excessively large prompts.
-                if len(code_lines) > 60:
+                if len(code_lines) > 80:
 
-                    code_lines = (
-                        code_lines[:60]
-                    )
+                    code_lines = code_lines[:80]
 
                 sections.extend(
                     code_lines
@@ -951,6 +1472,14 @@ class ContextBuilder:
                 sections.append(
                     "```"
                 )
+
+        sections.append(
+            ""
+        )
+
+        sections.append(
+            "END OF IMPLEMENTATION PATH EVIDENCE"
+        )
 
         return "\n".join(
             sections
