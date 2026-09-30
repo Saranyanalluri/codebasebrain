@@ -1,113 +1,166 @@
+from __future__ import annotations
+
+from collections import defaultdict
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 import json
 from pathlib import Path
 
-from app.explanation_engine import ExplanationEngine
-
-
-CODE_DOCUMENTS_PATH = Path(
-    "data/indexes/code_documents.json"
-)
-
-GRAPH_PATH = Path(
-    "data/indexes/code_graph.json"
-)
-
 
 class ContextBuilder:
+    """
+    Builds implementation-oriented context from retrieval results
+    and the CodebaseBrain code graph.
+
+    The builder is repository-agnostic and does not hard-code a
+    particular implementation path.
+    """
 
     def __init__(
         self,
-        documents_path=CODE_DOCUMENTS_PATH,
-        graph_path=GRAPH_PATH
+        graph_path: str = "data/indexes/code_graph.json",
+        code_documents_path: str = "data/indexes/code_documents.json",
     ):
+        self.graph_path = graph_path
+        self.code_documents_path = code_documents_path
 
-        self.documents_path = Path(
-            documents_path
+        self.graph_data: Dict[str, Any] = {}
+        self.documents: Dict[str, Dict[str, Any]] = {}
+
+        self.relationships: Dict[
+            str, List[Dict[str, Any]]
+        ] = defaultdict(list)
+
+        self.reverse_relationships: Dict[
+            str, List[Dict[str, Any]]
+        ] = defaultdict(list)
+
+        self._load_graph()
+        self._load_documents()
+        self._build_relationship_indexes()
+
+    # ============================================================
+    # Loading
+    # ============================================================
+
+    def _load_graph(self) -> None:
+
+        path = Path(
+            self.graph_path
         )
 
-        self.graph_path = Path(
-            graph_path
-        )
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Graph file not found: {self.graph_path}"
+            )
 
-        # ======================================================
-        # Explanation engine
-        # ======================================================
-
-        self.explanation_engine = ExplanationEngine()
-
-        # ======================================================
-        # Load code documents
-        # ======================================================
-
-        print("Loading code documents...")
-
-        with self.documents_path.open(
+        with path.open(
             "r",
             encoding="utf-8"
-        ) as file:
+        ) as f:
 
-            self.documents = json.load(file)
+            self.graph_data = json.load(f)
 
-        print(
-            f"Loaded {len(self.documents)} code documents."
+    def _load_documents(self) -> None:
+
+        path = Path(
+            self.code_documents_path
         )
 
-        # ======================================================
-        # Load code graph
-        # ======================================================
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Code documents file not found: "
+                f"{self.code_documents_path}"
+            )
 
-        print("Loading code graph...")
-
-        with self.graph_path.open(
+        with path.open(
             "r",
             encoding="utf-8"
-        ) as file:
+        ) as f:
 
-            graph = json.load(file)
+            data = json.load(f)
 
-        self.nodes = graph.get(
-            "nodes",
-            []
-        )
+        # --------------------------------------------------------
+        # Dictionary format
+        # --------------------------------------------------------
 
-        self.edges = graph.get(
+        if isinstance(data, dict):
+
+            if "documents" in data:
+
+                data = data["documents"]
+
+            if isinstance(data, dict):
+
+                for key, value in data.items():
+
+                    if not isinstance(value, dict):
+                        continue
+
+                    qualified_name = (
+                        value.get("qualified_name")
+                        or key
+                    )
+
+                    self.documents[
+                        qualified_name
+                    ] = value
+
+            elif isinstance(data, list):
+
+                for item in data:
+
+                    if not isinstance(item, dict):
+                        continue
+
+                    qualified_name = item.get(
+                        "qualified_name"
+                    )
+
+                    if qualified_name:
+
+                        self.documents[
+                            qualified_name
+                        ] = item
+
+        # --------------------------------------------------------
+        # List format
+        # --------------------------------------------------------
+
+        elif isinstance(data, list):
+
+            for item in data:
+
+                if not isinstance(item, dict):
+                    continue
+
+                qualified_name = item.get(
+                    "qualified_name"
+                )
+
+                if qualified_name:
+
+                    self.documents[
+                        qualified_name
+                    ] = item
+
+    # ============================================================
+    # Graph indexing
+    # ============================================================
+
+    def _build_relationship_indexes(self) -> None:
+
+        self.relationships.clear()
+        self.reverse_relationships.clear()
+
+        edges = self.graph_data.get(
             "edges",
             []
         )
 
-        print(
-            f"Loaded {len(self.nodes)} graph nodes."
-        )
+        for edge in edges:
 
-        print(
-            f"Loaded {len(self.edges)} graph edges."
-        )
-
-        # ======================================================
-        # Build document lookup
-        # ======================================================
-
-        self.document_lookup = {}
-
-        for document in self.documents:
-
-            qualified_name = document.get(
-                "qualified_name"
-            )
-
-            if qualified_name:
-
-                self.document_lookup[
-                    qualified_name
-                ] = document
-
-        # ======================================================
-        # Build graph relationship lookup
-        # ======================================================
-
-        self.relationships = {}
-
-        for edge in self.edges:
+            if not isinstance(edge, dict):
+                continue
 
             source = edge.get(
                 "source"
@@ -121,311 +174,312 @@ class ContextBuilder:
                 "type"
             )
 
-            if not source or not target:
+            if not source:
                 continue
 
-            # --------------------------------------------------
-            # Outgoing relationship
-            # --------------------------------------------------
+            if not target:
+                continue
 
-            self.relationships.setdefault(
-                source,
-                []
-            ).append(
-                {
-                    "direction": "outgoing",
-                    "type": edge_type,
-                    "target": target
-                }
-            )
+            if not edge_type:
+                continue
 
-            # --------------------------------------------------
-            # Incoming relationship
-            # --------------------------------------------------
+            relationship = {
+                "type": edge_type,
+                "source": source,
+                "target": target,
+            }
 
-            self.relationships.setdefault(
-                target,
-                []
-            ).append(
-                {
-                    "direction": "incoming",
-                    "type": edge_type,
-                    "source": source
-                }
-            )
+            if "file" in edge:
 
-        # ======================================================
-        # Temporary graph verification
-        # ======================================================
+                relationship["file"] = (
+                    edge["file"]
+                )
 
-        print(
-            "\nDEBUG: App.add_url_rule relationships loaded:"
-        )
+            if "line" in edge:
 
-        for relationship in self.relationships.get(
-            "App.add_url_rule",
-            []
-        ):
+                relationship["line"] = (
+                    edge["line"]
+                )
 
-            print(
+            self.relationships[
+                source
+            ].append(
                 relationship
             )
 
-        print(
-            "\nDEBUG: BlueprintSetupState.add_url_rule "
-            "relationships loaded:"
-        )
-
-        for relationship in self.relationships.get(
-            "BlueprintSetupState.add_url_rule",
-            []
-        ):
-
-            print(
+            self.reverse_relationships[
+                target
+            ].append(
                 relationship
             )
 
-    # ==========================================================
+    # ============================================================
     # Graph helpers
-    # ==========================================================
+    # ============================================================
 
-    def get_relationships(
+    def _get_outgoing_relationships(
         self,
-        qualified_name
-    ):
-
-        """
-        Return graph relationships connected
-        to a symbol.
-        """
+        node: str,
+    ) -> List[Dict[str, Any]]:
 
         return self.relationships.get(
-            qualified_name,
+            node,
             []
         )
 
-    # ==========================================================
-    # Implementation path helpers
-    # ==========================================================
+    def _get_incoming_relationships(
+        self,
+        node: str,
+    ) -> List[Dict[str, Any]]:
+
+        return self.reverse_relationships.get(
+            node,
+            []
+        )
 
     def _get_outgoing_calls(
         self,
-        qualified_name
-    ):
+        node: str,
+    ) -> List[str]:
 
-        """
-        Return only outgoing CALLS relationships.
-        """
+        targets = []
 
-        calls = []
-
-        for relationship in self.get_relationships(
-            qualified_name
+        for relationship in self._get_outgoing_relationships(
+            node
         ):
 
-            if (
-                relationship.get("direction") == "outgoing"
-                and relationship.get("type") == "CALLS"
-            ):
+            if relationship.get(
+                "type"
+            ) != "CALLS":
 
-                target = relationship.get(
-                    "target"
-                )
+                continue
 
-                if target:
-
-                    calls.append(
-                        target
-                    )
-
-        return calls
-
-    def _find_document_containing(
-        self,
-        text
-    ):
-
-        """
-        Find documents whose source code contains
-        the requested text.
-        """
-
-        matches = []
-
-        for document in self.documents:
-
-            code = document.get(
-                "text",
-                ""
+            target = relationship.get(
+                "target"
             )
 
-            if text in code:
+            if target:
 
-                matches.append(
-                    document
+                targets.append(
+                    target
                 )
 
-        return matches
+        return targets
+
+    # ============================================================
+    # Document helpers
+    # ============================================================
+
+    def _get_document(
+        self,
+        qualified_name: str,
+    ) -> Optional[Dict[str, Any]]:
+
+        return self.documents.get(
+            qualified_name
+        )
+
+    def _get_code(
+        self,
+        qualified_name: str,
+    ) -> str:
+
+        document = self._get_document(
+            qualified_name
+        )
+
+        if not document:
+            return ""
+
+        return (
+            document.get("text")
+            or document.get("code")
+            or document.get("content")
+            or ""
+        )
+
+    # ============================================================
+    # Relationship helpers
+    # ============================================================
+
+    def _find_relationship(
+        self,
+        source: str,
+        target: str,
+    ) -> Optional[Dict[str, Any]]:
+
+        for relationship in (
+            self._get_outgoing_relationships(
+                source
+            )
+        ):
+
+            if relationship.get(
+                "target"
+            ) == target:
+
+                return relationship
+
+        return None
+
+    def get_relationships_for_node(
+        self,
+        node: str,
+    ) -> List[Dict[str, Any]]:
+
+        relationships = []
+
+        # --------------------------------------------------------
+        # Incoming relationships
+        # --------------------------------------------------------
+
+        for relationship in (
+            self._get_incoming_relationships(
+                node
+            )
+        ):
+
+            relationships.append(
+                {
+                    "direction": "incoming",
+                    "type": relationship.get(
+                        "type"
+                    ),
+                    "source": relationship.get(
+                        "source"
+                    ),
+                    "target": relationship.get(
+                        "target"
+                    ),
+                    "file": relationship.get(
+                        "file"
+                    ),
+                    "line": relationship.get(
+                        "line"
+                    ),
+                }
+            )
+
+        # --------------------------------------------------------
+        # Outgoing relationships
+        # --------------------------------------------------------
+
+        for relationship in (
+            self._get_outgoing_relationships(
+                node
+            )
+        ):
+
+            relationships.append(
+                {
+                    "direction": "outgoing",
+                    "type": relationship.get(
+                        "type"
+                    ),
+                    "source": relationship.get(
+                        "source"
+                    ),
+                    "target": relationship.get(
+                        "target"
+                    ),
+                    "file": relationship.get(
+                        "file"
+                    ),
+                    "line": relationship.get(
+                        "line"
+                    ),
+                }
+            )
+
+        return relationships
+
+    # ============================================================
+    # Deferred blueprint registration
+    # ============================================================
 
     def _resolve_deferred_blueprint_registration(
         self,
-        current,
-        path,
-        visited
-    ):
+        current: str,
+        path: List[str],
+        visited: Set[str],
+    ) -> Optional[str]:
 
         """
-        Resolve Flask's deferred blueprint registration flow.
+        Handles Flask blueprint registration relationships
+        that are represented indirectly.
 
-        Blueprint.add_url_rule()
-            -> Blueprint.record()
-            -> BlueprintSetupState.add_url_rule()
-            -> App.add_url_rule()
-
-        The static call graph does not represent the
-        deferred lambda as a normal direct CALLS edge,
-        so the relationship is resolved here.
+        This is kept narrow because these relationships are
+        specific to the repository graph currently being analyzed.
         """
 
         if current == "Blueprint.add_url_rule":
 
-            target = "Blueprint.record"
+            candidate = (
+                "Blueprint.record"
+            )
 
-            if target not in visited:
+            if (
+                candidate not in visited
+                and candidate in self.documents
+            ):
 
-                return target
+                return candidate
 
         if current == "Blueprint.record":
 
-            target = "BlueprintSetupState.add_url_rule"
+            candidate = (
+                "BlueprintSetupState.add_url_rule"
+            )
 
-            if target not in visited:
+            if (
+                candidate not in visited
+                and candidate in self.documents
+            ):
 
-                return target
+                return candidate
 
         return None
 
-    # ==========================================================
-    # Find the best retrieved starting point
-    # ==========================================================
-
-    def _select_best_start(
-        self,
-        results
-    ):
-
-        """
-        Select the most useful implementation candidate.
-        """
-
-        candidates = []
-
-        for index, result in enumerate(
-            results
-        ):
-
-            qualified_name = result.get(
-                "qualified_name"
-            )
-
-            if not qualified_name:
-                continue
-
-            score = 0
-
-            # --------------------------------------------------
-            # Strong API/application implementations
-            # --------------------------------------------------
-
-            if qualified_name == "App.add_url_rule":
-
-                score += 100
-
-            elif qualified_name == "Blueprint.add_url_rule":
-
-                score += 90
-
-            elif qualified_name == "BlueprintSetupState.add_url_rule":
-
-                score += 80
-
-            # --------------------------------------------------
-            # Methods with runtime CALLS
-            # --------------------------------------------------
-
-            outgoing_calls = self._get_outgoing_calls(
-                qualified_name
-            )
-
-            score += len(
-                outgoing_calls
-            ) * 10
-
-            # --------------------------------------------------
-            # Penalize abstract implementation
-            # --------------------------------------------------
-
-            if qualified_name == "Scaffold.add_url_rule":
-
-                score -= 50
-
-            # --------------------------------------------------
-            # Prefer actual source code
-            # --------------------------------------------------
-
-            code = result.get(
-                "code",
-                ""
-            )
-
-            if code:
-
-                score += 5
-
-            candidates.append(
-                (
-                    score,
-                    -index,
-                    qualified_name
-                )
-            )
-
-        if not candidates:
-
-            return None
-
-        candidates.sort(
-            reverse=True
-        )
-
-        return candidates[0][2]
-
-    # ==========================================================
-    # Build one normal CALLS path
-    # ==========================================================
+    # ============================================================
+    # Query-aware implementation path
+    # ============================================================
 
     def _build_path_from_start(
         self,
-        start,
-        max_depth=8
-    ):
+        start: str,
+        allowed_nodes: Optional[
+            Iterable[str]
+        ] = None,
+        max_depth: int = 8,
+    ) -> List[str]:
 
         """
-        Follow CALLS relationships from a selected
-        implementation candidate.
+        Follow CALLS relationships while preferring targets
+        already present in the retrieved evidence.
+
+        This prevents the context builder from blindly selecting
+        the first outgoing CALLS relationship.
         """
 
         if not start:
 
             return []
 
-        path = []
+        allowed_nodes = set(
+            allowed_nodes or []
+        )
 
-        visited = set()
+        path: List[str] = []
+
+        visited: Set[str] = set()
 
         current = start
 
         while current:
+
+            # ----------------------------------------------------
+            # Prevent cycles
+            # ----------------------------------------------------
 
             if current in visited:
 
@@ -439,19 +493,23 @@ class ContextBuilder:
                 current
             )
 
+            # ----------------------------------------------------
+            # Depth limit
+            # ----------------------------------------------------
+
             if len(path) >= max_depth:
 
                 break
 
-            # --------------------------------------------------
-            # Deferred blueprint registration
-            # --------------------------------------------------
+            # ----------------------------------------------------
+            # Deferred blueprint relationships
+            # ----------------------------------------------------
 
             deferred_target = (
                 self._resolve_deferred_blueprint_registration(
                     current,
                     path,
-                    visited
+                    visited,
                 )
             )
 
@@ -461,50 +519,43 @@ class ContextBuilder:
 
                 continue
 
-            # --------------------------------------------------
+            # ----------------------------------------------------
             # Normal CALLS relationships
-            # --------------------------------------------------
+            # ----------------------------------------------------
 
-            call_targets = self._get_outgoing_calls(
-                current
+            call_targets = (
+                self._get_outgoing_calls(
+                    current
+                )
             )
 
             if not call_targets:
 
                 break
 
-            priority_terms = [
-                "add_url_rule",
-                "register",
-                "url_map",
-                "view_functions"
-            ]
-
-            def priority(
-                target
-            ):
-
-                for term in priority_terms:
-
-                    if term in target:
-
-                        return 0
-
-                return 1
-
-            call_targets.sort(
-                key=priority
-            )
+            # ----------------------------------------------------
+            # Prefer a target that was actually retrieved.
+            # ----------------------------------------------------
 
             next_node = None
 
             for target in call_targets:
 
-                if target not in visited:
+                if target in visited:
+
+                    continue
+
+                if target in allowed_nodes:
 
                     next_node = target
 
                     break
+
+            # ----------------------------------------------------
+            # No relevant retrieved target.
+            #
+            # Stop instead of wandering into an unrelated branch.
+            # ----------------------------------------------------
 
             if next_node is None:
 
@@ -514,28 +565,75 @@ class ContextBuilder:
 
         return path
 
-    # ==========================================================
-    # Build implementation path
-    # ==========================================================
+    # ============================================================
+    # Build implementation paths
+    # ============================================================
 
     def build_implementation_path(
         self,
-        results
-    ):
+        results: List[Dict[str, Any]],
+        max_paths: int = 5,
+    ) -> List[List[str]]:
 
         """
-        Build a runtime-oriented implementation path.
+        Build implementation paths from retrieved symbols.
+
+        Only retrieved symbols are allowed to guide normal CALLS
+        traversal. Deferred blueprint relationships are handled
+        separately.
         """
 
         if not results:
 
             return []
 
-        candidate_paths = []
+        # --------------------------------------------------------
+        # Build evidence set
+        # --------------------------------------------------------
 
-        seen_starts = set()
+        allowed_nodes: Set[str] = set()
 
         for result in results:
+
+            if not isinstance(
+                result,
+                dict
+            ):
+
+                continue
+
+            qualified_name = result.get(
+                "qualified_name"
+            )
+
+            if qualified_name:
+
+                allowed_nodes.add(
+                    qualified_name
+                )
+
+        candidate_paths: List[
+            List[str]
+        ] = []
+
+        seen_paths: Set[
+            Tuple[str, ...]
+        ] = set()
+
+        seen_starts: Set[str] = set()
+
+        # --------------------------------------------------------
+        # Try each retrieved component as a starting point.
+        # --------------------------------------------------------
+
+        for result in results:
+
+            if not isinstance(
+                result,
+                dict
+            ):
+
+                continue
 
             start = result.get(
                 "qualified_name"
@@ -553,1001 +651,720 @@ class ContextBuilder:
                 start
             )
 
-            path = self._build_path_from_start(
-                start
+            path = (
+                self._build_path_from_start(
+                    start,
+                    allowed_nodes=allowed_nodes,
+                )
             )
 
-            if path:
+            if not path:
 
-                candidate_paths.append(
-                    path
-                )
+                continue
 
-        # ------------------------------------------------------
-        # Concrete App implementation
-        # ------------------------------------------------------
-
-        if (
-            "App.add_url_rule"
-            in self.document_lookup
-        ):
-
-            app_path = [
-                "App.add_url_rule"
-            ]
-
-            if app_path not in candidate_paths:
-
-                candidate_paths.append(
-                    app_path
-                )
-
-        # ------------------------------------------------------
-        # Blueprint registration path
-        # ------------------------------------------------------
-
-        if (
-            "Blueprint.add_url_rule"
-            in self.document_lookup
-            and
-            "Blueprint.record"
-            in self.document_lookup
-            and
-            "BlueprintSetupState.add_url_rule"
-            in self.document_lookup
-            and
-            "App.add_url_rule"
-            in self.document_lookup
-        ):
-
-            blueprint_path = [
-                "Blueprint.add_url_rule",
-                "Blueprint.record",
-                "BlueprintSetupState.add_url_rule",
-                "App.add_url_rule"
-            ]
-
-            if blueprint_path not in candidate_paths:
-
-                candidate_paths.append(
-                    blueprint_path
-                )
-
-        # ------------------------------------------------------
-        # Score candidate paths
-        # ------------------------------------------------------
-
-        def path_score(
-            path
-        ):
-
-            score = 0
-
-            score += len(
+            path_tuple = tuple(
                 path
-            ) * 10
+            )
 
-            if "App.add_url_rule" in path:
+            if path_tuple in seen_paths:
 
-                score += 50
+                continue
 
-            if (
-                "Blueprint.add_url_rule" in path
-                and
-                "Blueprint.record" in path
-                and
-                "BlueprintSetupState.add_url_rule" in path
-                and
-                "App.add_url_rule" in path
-            ):
+            seen_paths.add(
+                path_tuple
+            )
 
-                score += 40
+            candidate_paths.append(
+                path
+            )
 
-            if (
-                len(path) == 1
-                and
-                path[0] == "Scaffold.add_url_rule"
-            ):
+        # --------------------------------------------------------
+        # Generic path scoring
+        # --------------------------------------------------------
 
-                score -= 100
+        scored_paths = []
 
-            final_node = path[-1]
+        for path in candidate_paths:
 
-            if final_node == "App.add_url_rule":
+            score = 0.0
 
-                score += 30
+            # Longer connected implementation path.
+            score += (
+                len(path) * 10
+            )
 
-            return score
+            # Evidence-backed nodes.
+            score += (
+                sum(
+                    1
+                    for node in path
+                    if node in allowed_nodes
+                )
+                * 5
+            )
 
-        if not candidate_paths:
+            scored_paths.append(
+                (
+                    score,
+                    path,
+                )
+            )
 
-            return []
-
-        return max(
-            candidate_paths,
-            key=path_score
+        scored_paths.sort(
+            key=lambda item: item[0],
+            reverse=True,
         )
 
-    # ==========================================================
-    # Build source context for every implementation-path
-    # component
-    # ==========================================================
+        return [
+            path
+            for _, path in scored_paths[
+                :max_paths
+            ]
+        ]
+
+    # ============================================================
+    # Build path result objects
+    # ============================================================
 
     def _build_path_results(
         self,
-        implementation_path
-    ):
-
-        """
-        Load repository evidence for every symbol in
-        the implementation path.
-        """
+        paths: List[List[str]],
+    ) -> List[Dict[str, Any]]:
 
         path_results = []
 
+        for path in paths:
+
+            if not path:
+
+                continue
+
+            steps = []
+
+            for index in range(
+                len(path) - 1
+            ):
+
+                source = path[
+                    index
+                ]
+
+                target = path[
+                    index + 1
+                ]
+
+                relationship = (
+                    self._find_relationship(
+                        source,
+                        target,
+                    )
+                )
+
+                # ------------------------------------------------
+                # Normal graph edge
+                # ------------------------------------------------
+
+                if relationship:
+
+                    relationship_type = (
+                        relationship.get(
+                            "type"
+                        )
+                    )
+
+                # ------------------------------------------------
+                # Deferred blueprint relationship
+                # ------------------------------------------------
+
+                elif (
+                    source
+                    == "Blueprint.add_url_rule"
+                    and target
+                    == "Blueprint.record"
+                ):
+
+                    relationship_type = (
+                        "DEFERRED"
+                    )
+
+                elif (
+                    source
+                    == "Blueprint.record"
+                    and target
+                    == "BlueprintSetupState.add_url_rule"
+                ):
+
+                    relationship_type = (
+                        "DEFERRED"
+                    )
+
+                else:
+
+                    relationship_type = (
+                        "UNKNOWN"
+                    )
+
+                steps.append(
+                    {
+                        "source": source,
+                        "target": target,
+                        "type": relationship_type,
+                        "relationship": relationship,
+                    }
+                )
+
+            path_results.append(
+                {
+                    "path": path,
+                    "steps": steps,
+                }
+            )
+
+        return path_results
+
+    # ============================================================
+    # Relevant documents
+    # ============================================================
+
+    def _select_relevant_documents(
+        self,
+        results: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+
+        selected = []
+
         seen = set()
 
-        for qualified_name in implementation_path:
+        for result in results:
+
+            if not isinstance(
+                result,
+                dict
+            ):
+
+                continue
+
+            qualified_name = result.get(
+                "qualified_name"
+            )
 
             if not qualified_name:
+
                 continue
 
             if qualified_name in seen:
+
                 continue
 
             seen.add(
                 qualified_name
             )
 
-            document = self.document_lookup.get(
-                qualified_name
+            document = (
+                self._get_document(
+                    qualified_name
+                )
             )
 
-            if not document:
-                continue
+            if document:
 
-            result = {
-                "qualified_name": qualified_name,
-
-                "name": document.get(
-                    "name",
-                    ""
-                ),
-
-                "file": document.get(
-                    "file",
-                    ""
-                ),
-
-                "line": document.get(
-                    "line",
-                    ""
-                ),
-
-                "type": document.get(
-                    "type",
-                    ""
-                ),
-
-                "code": document.get(
-                    "text",
-                    ""
-                ),
-
-                "score": None,
-
-                "final_score": None,
-
-                "sources": [
-                    "implementation_path"
-                ],
-
-                "evidence": [
-                    "implementation_path"
-                ],
-
-                "explanation": (
-                    "Included because this symbol belongs "
-                    "to the implementation path."
-                ),
-
-                "graph_relationships": []
-            }
-
-            relationships = self.get_relationships(
-                qualified_name
-            )
-
-            for relationship in relationships:
-
-                result["graph_relationships"].append(
-                    {
-                        "direction": relationship.get(
-                            "direction"
-                        ),
-
-                        "type": relationship.get(
-                            "type"
-                        ),
-
-                        "target": relationship.get(
-                            "target"
-                        ),
-
-                        "source": relationship.get(
-                            "source"
-                        )
-                    }
+                selected.append(
+                    document
                 )
 
-            path_results.append(
-                result
-            )
+        return selected
 
-        return path_results
-
-    # ==========================================================
-    # Build graph-aware result
-    # ==========================================================
-
-    def build_result_context(
-        self,
-        result
-    ):
-
-        qualified_name = result.get(
-            "qualified_name"
-        )
-
-        document = self.document_lookup.get(
-            qualified_name,
-            {}
-        )
-
-        relationships = self.get_relationships(
-            qualified_name
-        )
-
-        graph_relationships = []
-
-        for relationship in relationships:
-
-            graph_relationships.append(
-                {
-                    "direction": relationship.get(
-                        "direction"
-                    ),
-
-                    "type": relationship.get(
-                        "type"
-                    ),
-
-                    "target": relationship.get(
-                        "target"
-                    ),
-
-                    "source": relationship.get(
-                        "source"
-                    )
-                }
-            )
-
-        return {
-            "qualified_name": qualified_name,
-
-            "name": result.get(
-                "name",
-                document.get(
-                    "name",
-                    ""
-                )
-            ),
-
-            "file": result.get(
-                "file",
-                document.get(
-                    "file",
-                    ""
-                )
-            ),
-
-            "line": result.get(
-                "line",
-                document.get(
-                    "line",
-                    ""
-                )
-            ),
-
-            "type": result.get(
-                "type",
-                document.get(
-                    "type",
-                    ""
-                )
-            ),
-
-            "code": result.get(
-                "code",
-                document.get(
-                    "text",
-                    ""
-                )
-            ),
-
-            "score": result.get(
-                "score"
-            ),
-
-            "final_score": result.get(
-                "final_score",
-                result.get(
-                    "score",
-                    0
-                )
-            ),
-
-            "sources": result.get(
-                "sources",
-                []
-            ),
-
-            "evidence": result.get(
-                "evidence",
-                []
-            ),
-
-            "explanation": result.get(
-                "explanation",
-                ""
-            ),
-
-            "graph_relationships":
-                graph_relationships
-        }
-
-    # ==========================================================
-    # Build complete context
-    # ==========================================================
+    # ============================================================
+    # Main context builder
+    # ============================================================
 
     def build(
         self,
-        query,
-        results,
-        max_results=5
-    ):
+        query: str,
+        results: List[Dict[str, Any]],
+        max_results: Optional[int] = None,
+    ) -> Dict[str, Any]:
 
-        # ------------------------------------------------------
-        # Build normal retrieval context
-        # ------------------------------------------------------
+        """
+        Build structured context for answer generation.
 
-        context_results = []
+        Signature intentionally matches the current main.py:
 
-        for result in results[
-            :max_results
-        ]:
-
-            context_results.append(
-                self.build_result_context(
-                    result
-                )
+            context_builder.build(
+                query,
+                results,
+                max_results=5
             )
+        """
 
-        # ------------------------------------------------------
-        # Build implementation path
-        # ------------------------------------------------------
+        # --------------------------------------------------------
+        # Limit results
+        # --------------------------------------------------------
 
-        implementation_path = (
+        if max_results is not None:
+
+            results = results[
+                :max_results
+            ]
+
+        # --------------------------------------------------------
+        # Relevant documents
+        # --------------------------------------------------------
+
+        documents = (
+            self._select_relevant_documents(
+                results
+            )
+        )
+
+        # --------------------------------------------------------
+        # Implementation paths
+        # --------------------------------------------------------
+
+        implementation_paths = (
             self.build_implementation_path(
-                context_results
+                results
             )
         )
 
-        # ------------------------------------------------------
-        # Load EVERY path component
-        # ------------------------------------------------------
+        # --------------------------------------------------------
+        # Structured path information
+        # --------------------------------------------------------
 
-        path_results = self._build_path_results(
-            implementation_path
-        )
-
-        # ------------------------------------------------------
-        # Generate deterministic implementation explanation
-        # ------------------------------------------------------
-
-        implementation_explanation = (
-            self.explanation_engine.explain_implementation(
-                implementation_path,
-                path_results
+        path_results = (
+            self._build_path_results(
+                implementation_paths
             )
         )
-
-        # ------------------------------------------------------
-        # Merge retrieved results and path results
-        # ------------------------------------------------------
-
-        merged_results = []
-
-        seen_names = set()
-
-        for result in context_results:
-
-            qualified_name = result.get(
-                "qualified_name"
-            )
-
-            if not qualified_name:
-                continue
-
-            if qualified_name in seen_names:
-                continue
-
-            seen_names.add(
-                qualified_name
-            )
-
-            merged_results.append(
-                result
-            )
-
-        for result in path_results:
-
-            qualified_name = result.get(
-                "qualified_name"
-            )
-
-            if not qualified_name:
-                continue
-
-            if qualified_name in seen_names:
-                continue
-
-            seen_names.add(
-                qualified_name
-            )
-
-            merged_results.append(
-                result
-            )
 
         return {
             "query": query,
-
-            "results": merged_results,
-
-            "implementation_path":
-                implementation_path,
-
-            "path_results":
-                path_results,
-
-            "implementation_explanation":
-                implementation_explanation
+            "results": results,
+            "documents": documents,
+            "implementation_paths": (
+                implementation_paths
+            ),
+            "path_results": path_results,
         }
 
-    # ==========================================================
-    # Print graph-aware context
-    # ==========================================================
-
-    def print_context(
-        self,
-        context
-    ):
-
-        print(
-            "\n"
-            + "=" * 70
-        )
-
-        print(
-            "Graph-Aware Context"
-        )
-
-        print(
-            "=" * 70
-        )
-
-        results = context.get(
-            "results",
-            []
-        )
-
-        for index, result in enumerate(
-            results,
-            start=1
-        ):
-
-            print(
-                f"\nResult {index}: "
-                f"{result.get('qualified_name')}"
-            )
-
-            print(
-                f"File: "
-                f"{result.get('file')}"
-            )
-
-            print(
-                f"Line: "
-                f"{result.get('line')}"
-            )
-
-            print(
-                "\nCode Graph Relationships:"
-            )
-
-            relationships = result.get(
-                "graph_relationships",
-                []
-            )
-
-            for relationship in relationships:
-
-                relationship_type = relationship.get(
-                    "type",
-                    ""
-                )
-
-                direction = relationship.get(
-                    "direction",
-                    ""
-                )
-
-                if relationship_type == "DEFINES":
-
-                    continue
-
-                if direction == "outgoing":
-
-                    target = relationship.get(
-                        "target",
-                        ""
-                    )
-
-                    print(
-                        f"  - {relationship_type}: "
-                        f"{target}"
-                    )
-
-                elif direction == "incoming":
-
-                    source = relationship.get(
-                        "source",
-                        ""
-                    )
-
-                    print(
-                        f"  - incoming {relationship_type}: "
-                        f"{source}"
-                    )
-
-        print(
-            "\n"
-            + "=" * 70
-        )
-
-        print(
-            "IMPLEMENTATION PATH:"
-        )
-
-        print(
-            "=" * 70
-        )
-
-        implementation_path = context.get(
-            "implementation_path",
-            []
-        )
-
-        if implementation_path:
-
-            for index, step in enumerate(
-                implementation_path,
-                start=1
-            ):
-
-                print(
-                    f"{index}. {step}"
-                )
-
-        else:
-
-            print(
-                "No implementation path found."
-            )
-
-        # ------------------------------------------------------
-        # Deterministic implementation explanation
-        # ------------------------------------------------------
-
-        print(
-            "\n"
-            + "=" * 70
-        )
-
-        print(
-            "DETERMINISTIC IMPLEMENTATION EXPLANATION:"
-        )
-
-        print(
-            "=" * 70
-        )
-
-        implementation_explanation = context.get(
-            "implementation_explanation",
-            []
-        )
-
-        if implementation_explanation:
-
-            for index, explanation in enumerate(
-                implementation_explanation,
-                start=1
-            ):
-
-                print(
-                    f"{index}. {explanation}"
-                )
-
-        else:
-
-            print(
-                "No deterministic explanation established."
-            )
-
-    # ==========================================================
-    # Build LLM-ready context
-    # ==========================================================
+    # ============================================================
+    # LLM context
+    # ============================================================
 
     def build_llm_context(
         self,
-        query,
-        results,
-        max_results=5
-    ):
+        results: List[Dict[str, Any]],
+        query: Optional[str] = None,
+        max_results: Optional[int] = None,
+    ) -> str:
+
+        """
+        Convert structured context into a textual context
+        suitable for an LLM.
+        """
+
+        if query is None:
+
+            query = ""
 
         context = self.build(
             query,
             results,
-            max_results=max_results
+            max_results=max_results,
         )
 
         sections = []
 
-        sections.append(
-            "=" * 70
-        )
+        # --------------------------------------------------------
+        # Query
+        # --------------------------------------------------------
 
-        sections.append(
-            "LLM-READY CONTEXT"
-        )
+        if query:
 
-        sections.append(
-            "=" * 70
-        )
+            sections.append(
+                "USER QUERY:\n"
+                + query
+            )
 
-        sections.append(
-            ""
-        )
+        # --------------------------------------------------------
+        # Retrieved code
+        # --------------------------------------------------------
 
-        sections.append(
-            "USER QUESTION:"
-        )
-
-        sections.append(
-            query
-        )
-
-        sections.append(
-            ""
-        )
-
-        # ------------------------------------------------------
-        # Implementation path
-        # ------------------------------------------------------
-
-        sections.append(
-            "IMPLEMENTATION PATH:"
-        )
-
-        implementation_path = context.get(
-            "implementation_path",
+        documents = context.get(
+            "documents",
             []
         )
 
-        if implementation_path:
-
-            for index, step in enumerate(
-                implementation_path,
-                start=1
-            ):
-
-                sections.append(
-                    f"{index}. {step}"
-                )
-
-        else:
+        if documents:
 
             sections.append(
-                "No implementation path established."
+                "\nRETRIEVED CODE:"
             )
 
-        sections.append(
-            ""
-        )
-
-        # ------------------------------------------------------
-        # Deterministic explanation
-        # ------------------------------------------------------
-
-        sections.append(
-            "DETERMINISTIC IMPLEMENTATION EXPLANATION:"
-        )
-
-        implementation_explanation = context.get(
-            "implementation_explanation",
-            []
-        )
-
-        if implementation_explanation:
-
-            for index, explanation in enumerate(
-                implementation_explanation,
-                start=1
+            for index, document in enumerate(
+                documents,
+                start=1,
             ):
 
-                sections.append(
-                    f"{index}. {explanation}"
+                qualified_name = (
+                    document.get(
+                        "qualified_name",
+                        "unknown",
+                    )
                 )
 
-        else:
+                file_path = (
+                    document.get(
+                        "file",
+                        document.get(
+                            "file_path",
+                            "unknown",
+                        ),
+                    )
+                )
 
-            sections.append(
-                "No deterministic explanation established."
-            )
+                code = (
+                    document.get(
+                        "text",
+                        document.get(
+                            "code",
+                            document.get(
+                                "content",
+                                "",
+                            ),
+                        ),
+                    )
+                )
 
-        sections.append(
-            ""
-        )
+                sections.append(
+                    f"\n[{index}] "
+                    f"{qualified_name}"
+                    f"\nFile: {file_path}"
+                    f"\n\n{code}"
+                )
 
-        # ------------------------------------------------------
-        # Implementation-path source code
-        # ------------------------------------------------------
-
-        sections.append(
-            "IMPLEMENTATION PATH SOURCE CODE:"
-        )
-
-        sections.append(
-            ""
-        )
+        # --------------------------------------------------------
+        # Implementation paths
+        # --------------------------------------------------------
 
         path_results = context.get(
             "path_results",
             []
         )
 
-        path_result_lookup = {}
-
-        for result in path_results:
-
-            qualified_name = result.get(
-                "qualified_name",
-                ""
-            )
-
-            if qualified_name:
-
-                path_result_lookup[
-                    qualified_name
-                ] = result
-
-        for index, qualified_name in enumerate(
-            implementation_path,
-            start=1
-        ):
-
-            result = path_result_lookup.get(
-                qualified_name
-            )
-
-            if not result:
-                continue
+        if path_results:
 
             sections.append(
-                "=" * 70
+                "\nIMPLEMENTATION PATHS:"
             )
 
-            sections.append(
-                f"PATH COMPONENT {index}"
-            )
+            for index, path_result in enumerate(
+                path_results,
+                start=1,
+            ):
 
-            sections.append(
-                f"Symbol: {qualified_name}"
-            )
-
-            sections.append(
-                f"File: {result.get('file', '')}"
-            )
-
-            sections.append(
-                f"Line: {result.get('line', '')}"
-            )
-
-            # --------------------------------------------------
-            # Graph relationships
-            # --------------------------------------------------
-
-            relationships = result.get(
-                "graph_relationships",
-                []
-            )
-
-            relevant_relationships = []
-
-            for relationship in relationships:
-
-                relationship_type = relationship.get(
-                    "type",
-                    ""
+                path = path_result.get(
+                    "path",
+                    []
                 )
 
-                direction = relationship.get(
-                    "direction",
-                    ""
-                )
-
-                if relationship_type == "DEFINES":
+                if not path:
 
                     continue
 
-                if direction == "outgoing":
-
-                    target = relationship.get(
-                        "target",
-                        ""
-                    )
-
-                    if target:
-
-                        relevant_relationships.append(
-                            f"- {relationship_type}: "
-                            f"{target}"
-                        )
-
-                elif direction == "incoming":
-
-                    source = relationship.get(
-                        "source",
-                        ""
-                    )
-
-                    if source:
-
-                        relevant_relationships.append(
-                            f"- incoming "
-                            f"{relationship_type}: "
-                            f"{source}"
-                        )
-
-            if relevant_relationships:
+                sections.append(
+                    f"\nPath {index}:"
+                )
 
                 sections.append(
-                    "\nGraph relationships:"
+                    " -> ".join(
+                        path
+                    )
                 )
 
-                sections.extend(
-                    relevant_relationships
-                )
+                for step in path_result.get(
+                    "steps",
+                    []
+                ):
 
-            # --------------------------------------------------
-            # Source code
-            # --------------------------------------------------
+                    source = step.get(
+                        "source"
+                    )
 
-            code = result.get(
-                "code",
-                ""
+                    target = step.get(
+                        "target"
+                    )
+
+                    relationship_type = (
+                        step.get(
+                            "type"
+                        )
+                    )
+
+                    sections.append(
+                        f"- {source} "
+                        f"--{relationship_type}--> "
+                        f"{target}"
+                    )
+
+        # --------------------------------------------------------
+        # Retrieval evidence
+        # --------------------------------------------------------
+
+        if results:
+
+            sections.append(
+                "\nRETRIEVAL EVIDENCE:"
             )
 
-            if code:
+            for index, result in enumerate(
+                results,
+                start=1,
+            ):
 
-                sections.append(
-                    "\nCode:"
+                if not isinstance(
+                    result,
+                    dict
+                ):
+
+                    continue
+
+                qualified_name = (
+                    result.get(
+                        "qualified_name",
+                        "unknown",
+                    )
                 )
 
-                sections.append(
-                    "```python"
+                score = result.get(
+                    "score"
                 )
 
-                code_lines = code.splitlines()
+                if isinstance(
+                    score,
+                    (int, float)
+                ):
 
-                if len(code_lines) > 80:
+                    sections.append(
+                        f"{index}. "
+                        f"{qualified_name} "
+                        f"(score={score:.4f})"
+                    )
 
-                    code_lines = code_lines[:80]
+                else:
 
-                sections.extend(
-                    code_lines
-                )
-
-                sections.append(
-                    "```"
-                )
-
-        sections.append(
-            ""
-        )
-
-        sections.append(
-            "END OF IMPLEMENTATION PATH EVIDENCE"
-        )
+                    sections.append(
+                        f"{index}. "
+                        f"{qualified_name}"
+                    )
 
         return "\n".join(
             sections
         )
 
+    # ============================================================
+    # Debug printing
+    # ============================================================
 
-# ==============================================================
+    def print_context(
+        self,
+        results: List[Dict[str, Any]],
+        query: Optional[str] = None,
+    ) -> None:
+
+        context = self.build(
+            query or "",
+            results,
+        )
+
+        print(
+            "\n"
+            + "=" * 70
+        )
+
+        print(
+            "CODEBASE CONTEXT"
+        )
+
+        print(
+            "=" * 70
+        )
+
+        if query:
+
+            print(
+                f"\nQUERY:\n{query}"
+            )
+
+        # --------------------------------------------------------
+        # Retrieved results
+        # --------------------------------------------------------
+
+        print(
+            "\nRETRIEVED RESULTS:"
+        )
+
+        for index, result in enumerate(
+            results,
+            start=1,
+        ):
+
+            if not isinstance(
+                result,
+                dict
+            ):
+
+                continue
+
+            print(
+                f"{index}. "
+                f"{result.get('qualified_name')}"
+            )
+
+        # --------------------------------------------------------
+        # Implementation paths
+        # --------------------------------------------------------
+
+        print(
+            "\nIMPLEMENTATION PATHS:"
+        )
+
+        for index, path in enumerate(
+            context.get(
+                "implementation_paths",
+                []
+            ),
+            start=1,
+        ):
+
+            print(
+                f"{index}. "
+                + " -> ".join(
+                    path
+                )
+            )
+
+        # --------------------------------------------------------
+        # Graph relationships
+        # --------------------------------------------------------
+
+        print(
+            "\nGRAPH RELATIONSHIPS:"
+        )
+
+        shown = set()
+
+        for result in results:
+
+            if not isinstance(
+                result,
+                dict
+            ):
+
+                continue
+
+            node = result.get(
+                "qualified_name"
+            )
+
+            if not node:
+
+                continue
+
+            relationships = (
+                self.get_relationships_for_node(
+                    node
+                )
+            )
+
+            for relationship in relationships:
+
+                key = (
+                    relationship.get(
+                        "direction"
+                    ),
+                    relationship.get(
+                        "type"
+                    ),
+                    relationship.get(
+                        "source"
+                    ),
+                    relationship.get(
+                        "target"
+                    ),
+                )
+
+                if key in shown:
+
+                    continue
+
+                shown.add(
+                    key
+                )
+
+                direction = (
+                    relationship.get(
+                        "direction"
+                    )
+                )
+
+                edge_type = (
+                    relationship.get(
+                        "type"
+                    )
+                )
+
+                if direction == "incoming":
+
+                    print(
+                        f"{node} <- "
+                        f"{edge_type} - "
+                        f"{relationship.get('source')}"
+                    )
+
+                else:
+
+                    print(
+                        f"{node} - "
+                        f"{edge_type} -> "
+                        f"{relationship.get('target')}"
+                    )
+
+        print(
+            "=" * 70
+        )
+
+
+# ================================================================
 # Standalone test
-# ==============================================================
+# ================================================================
 
-def main():
-
-    from app.hybrid_retriever import (
-        HybridRetriever
-    )
-
-    query = (
-        "How does Flask register URL rules?"
-    )
-
-    print(
-        "Running hybrid retrieval..."
-    )
-
-    retriever = HybridRetriever()
-
-    results = retriever.search(
-        query,
-        top_k=5
-    )
-
-    print(
-        f"Retrieved {len(results)} results."
-    )
+if __name__ == "__main__":
 
     builder = ContextBuilder()
 
-    context = builder.build(
-        query,
-        results,
-        max_results=5
-    )
+    test_results = [
+        {
+            "qualified_name":
+                "Flask.full_dispatch_request",
+            "score": 1.0,
+        },
+        {
+            "qualified_name":
+                "Flask.dispatch_request",
+            "score": 0.9,
+        },
+        {
+            "qualified_name":
+                "Flask.preprocess_request",
+            "score": 0.8,
+        },
+    ]
 
     builder.print_context(
-        context
+        test_results,
+        query=(
+            "How does Flask dispatch "
+            "an incoming HTTP request?"
+        ),
     )
-
-    print(
-        "\n"
-        + "=" * 70
-    )
-
-    print(
-        "LLM-READY CONTEXT"
-    )
-
-    print(
-        "=" * 70
-    )
-
-    print(
-        builder.build_llm_context(
-            query,
-            results,
-            max_results=5
-        )
-    )
-
-
-if __name__ == "__main__":
-    main()

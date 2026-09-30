@@ -1,21 +1,77 @@
+from app.llm.factory import get_llm_provider
+
+
 class LLMAnswerGenerator:
 
-    def __init__(self, provider):
-        self.provider = provider
+    def __init__(self, provider="local"):
+
+        # If an actual provider object is supplied,
+        # use it directly.
+        if hasattr(provider, "generate"):
+            self.provider = provider
+
+        # Otherwise resolve the provider name through
+        # the existing provider factory.
+        else:
+            self.provider = get_llm_provider(
+                provider
+            )
 
     def generate(self, query, context):
-        deterministic = context.get("implementation_explanation")
+
+        # --------------------------------------------------
+        # Use deterministic explanation if available
+        # --------------------------------------------------
+
+        deterministic = context.get(
+            "implementation_explanation"
+        )
 
         if deterministic:
             return deterministic
 
-        prompt = self._build_prompt(query, context)
-        print("\n===== LLM PROMPT =====")
+        # --------------------------------------------------
+        # Build prompt
+        # --------------------------------------------------
+
+        prompt = self._build_prompt(
+            query,
+            context
+        )
+
+        print(
+            "\n===== LLM PROMPT ====="
+        )
+
         print(prompt)
 
-        return self.provider.generate(prompt)
+        # --------------------------------------------------
+        # Generate answer
+        # --------------------------------------------------
 
-    def _build_prompt(self, query, context):
+        return self.provider.generate(
+            prompt
+        )
+
+    def _build_prompt(
+        self,
+        query,
+        context
+    ):
+
+        implementation_path = context.get(
+            "implementation_path",
+            context.get(
+                "implementation_paths",
+                []
+            )
+        )
+
+        path_results = context.get(
+            "path_results",
+            []
+        )
+
         return f"""
 You are CodebaseBrain.
 
@@ -25,10 +81,10 @@ USER QUESTION:
 {query}
 
 IMPLEMENTATION PATH:
-{context.get("implementation_path", [])}
+{implementation_path}
 
 SOURCE CODE:
-{context.get("path_results", [])}
+{path_results}
 
 Give a concise factual answer.
 Do not speculate.
